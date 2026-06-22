@@ -168,14 +168,59 @@ export default function MeetingDetail({ navigate: navProp, dark: darkProp, setDa
   // ── Use REAL meeting data if available, otherwise fall back to mock ────────
   const isReal = !!realMeeting;
 
-  // Build participant list with auto colors for real meetings
-  const COLORS = ["#6366F1", "#22D3EE", "#F59E0B", "#A78BFA"];
+  // Color palette for speakers
+  const COLORS = ["#6366F1", "#22D3EE", "#F59E0B", "#A78BFA", "#10B981", "#F43F5E"];
+
+  // ── Calculate REAL speaker stats from transcript segments ───────────────────
+  const calculateSpeakerStats = (segments) => {
+    if (!segments || segments.length === 0) return {};
+    const stats = {};
+    segments.forEach(seg => {
+      const sp = seg.speaker || "Speaker 1";
+      if (!stats[sp]) stats[sp] = { wordCount: 0, duration: 0, segmentCount: 0 };
+      stats[sp].wordCount    += (seg.text || "").split(/\s+/).filter(Boolean).length;
+      stats[sp].duration     += (seg.end - seg.start);
+      stats[sp].segmentCount += 1;
+    });
+    return stats;
+  };
+
+  // Build participant objects with REAL talk time percentages
+  const buildRealParticipants = (segments) => {
+    const stats = calculateSpeakerStats(segments);
+    const speakers = Object.keys(stats);
+    if (speakers.length === 0) return [];
+
+    const totalDuration = speakers.reduce((sum, sp) => sum + stats[sp].duration, 0);
+    const totalWords    = speakers.reduce((sum, sp) => sum + stats[sp].wordCount, 0);
+
+    return speakers.map((sp, i) => {
+      const talk = totalDuration > 0
+        ? Math.round((stats[sp].duration / totalDuration) * 100)
+        : Math.round((stats[sp].wordCount / Math.max(totalWords, 1)) * 100);
+      return {
+        name:     sp,                                                  // e.g. "Speaker 1"
+        initials: sp.replace("Speaker ", "S"),                          // S1, S2 etc.
+        color:    COLORS[i % COLORS.length],
+        talk,
+        words:    stats[sp].wordCount,
+        duration: stats[sp].duration,
+      };
+    });
+  };
+
+  // Fallback for legacy / mock data
   const buildParticipants = (names) => names.map((name, i) => ({
     name,
     initials: name.split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase(),
     color: COLORS[i % COLORS.length],
-    talk: Math.round(100 / names.length),
+    talk: Math.round(100 / Math.max(names.length, 1)),
   }));
+
+  // Use real speakers from transcript when available, otherwise fall back to names
+  const realParticipants = isReal && realMeeting.transcript
+    ? buildRealParticipants(realMeeting.transcript)
+    : null;
 
   const M = isReal ? {
     title:        realMeeting.title || "Untitled Meeting",
@@ -184,7 +229,9 @@ export default function MeetingDetail({ navigate: navProp, dark: darkProp, setDa
     duration:     realMeeting.duration || "—",
     type:         realMeeting.type || "Team Meeting",
     language:     realMeeting.language || "English",
-    participants: buildParticipants(realMeeting.participants || []),
+    participants: (realParticipants && realParticipants.length > 0)
+                    ? realParticipants
+                    : buildParticipants(realMeeting.participants || ["Speaker 1"]),
     tags:         realMeeting.tags || [],
     wordCount:    realMeeting.wordCount || 0,
     confidence:   96,
@@ -198,12 +245,19 @@ export default function MeetingDetail({ navigate: navProp, dark: darkProp, setDa
   const TASKS_R      = isReal
     ? (realMeeting.tagging?.tasks || []).map(t => ({ text: t, owner: "Team", due: "Soon", done: false }))
     : TASKS;
+
+  // ── Map real transcript segments to speaker INDEX (so existing UI works) ───
   const TRANSCRIPT_R = isReal && realMeeting.transcript
-    ? realMeeting.transcript.map(seg => ({
-        speaker: 0,
-        time: fmtTime(seg.start),
-        text: seg.text,
-      }))
+    ? realMeeting.transcript.map(seg => {
+        // Find speaker index from real participants list
+        const speakerName = seg.speaker || "Speaker 1";
+        const idx = M.participants.findIndex(p => p.name === speakerName);
+        return {
+          speaker: idx >= 0 ? idx : 0,
+          time:    fmtTime(seg.start),
+          text:    seg.text,
+        };
+      })
     : TRANSCRIPT;
 
   const [tasksDone, setTasksDone] = useState(TASKS_R.map(t => t.done));
@@ -586,13 +640,13 @@ export default function MeetingDetail({ navigate: navProp, dark: darkProp, setDa
                             className={`tx-line${expandedTx===i?" expanded":""}`}
                             onClick={()=>setExpandedTx(expandedTx===i?null:i)}
                           >
-                            <div className="tx-av" style={{background:SPEAKER_COLORS[line.speaker]}}>
-                              {SPEAKER_INITIALS[line.speaker]}
+                            <div className="tx-av" style={{background: M.participants[line.speaker]?.color || SPEAKER_COLORS[line.speaker]}}>
+                              {M.participants[line.speaker]?.initials || SPEAKER_INITIALS[line.speaker] || `S${line.speaker + 1}`}
                             </div>
                             <div className="tx-info">
                               <div className="tx-meta">
-                                <span className="tx-name" style={{color:SPEAKER_COLORS[line.speaker]}}>
-                                  {SPEAKER_NAMES[line.speaker]}
+                                <span className="tx-name" style={{color: M.participants[line.speaker]?.color || SPEAKER_COLORS[line.speaker]}}>
+                                  {M.participants[line.speaker]?.name || SPEAKER_NAMES[line.speaker] || `Speaker ${line.speaker + 1}`}
                                 </span>
                                 <span className="tx-time">{line.time}</span>
                               </div>
@@ -695,7 +749,7 @@ export default function MeetingDetail({ navigate: navProp, dark: darkProp, setDa
                               </div>
                               <div>
                                 <div className="sc-name">{p.name}</div>
-                                <div className="sc-role">{i===0?"Project Lead":i===1?"Backend Developer":"Project Supervisor"}</div>
+                                <div className="sc-role">{isReal ? (p.duration ? `${p.duration.toFixed(1)}s spoken` : "Detected speaker") : (i===0?"Project Lead":i===1?"Backend Developer":"Project Supervisor")}</div>
                               </div>
                               <div className="sc-pct" style={{color:p.color}}>{p.talk}%</div>
                             </div>
@@ -704,9 +758,9 @@ export default function MeetingDetail({ navigate: navProp, dark: darkProp, setDa
                             </div>
                             <div className="sc-stats">
                               {[
-                                {v:`~${Math.round(M.wordCount*(p.talk/100))}`, l:"Words"},
-                                {v:`${Math.round(32*(p.talk/100))}m`, l:"Talk time"},
-                                {v:`${Math.round(p.talk/10) + 2}`, l:"Questions"},
+                                {v: p.words !== undefined ? p.words : Math.round(M.wordCount * (p.talk/100)), l:"Words"},
+                                {v: p.duration !== undefined ? `${Math.round(p.duration/60)}m ${Math.round(p.duration%60)}s` : `${Math.round(32*(p.talk/100))}m`, l:"Talk time"},
+                                {v: Math.round(p.talk/10) + 2, l:"Questions"},
                               ].map((s,j) => (
                                 <div key={j} className="sc-stat">
                                   <div className="sc-sv">{s.v}</div>

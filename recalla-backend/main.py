@@ -8,16 +8,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Allow requests from React frontend
+# ── CORS — allow React frontend ───────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Register routes
+# ── Routes ────────────────────────────────────────────────────────────────────
 app.include_router(meetings_router, prefix="/api/meetings", tags=["Meetings"])
 
 @app.get("/")
@@ -27,3 +32,10 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+# ── Standalone runner ─────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    import uvicorn
+    print("\nStarting Recalla backend on http://localhost:8001")
+    print("API docs available at http://localhost:8001/docs\n")
+    uvicorn.run(app, host="127.0.0.1", port=8001)

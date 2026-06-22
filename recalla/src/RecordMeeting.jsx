@@ -109,10 +109,10 @@ const SpeakerAvatar = ({ num }) => {
 // ── Processing screen ─────────────────────────────────────────────────────────
 const ProcessingScreen = ({ T, dark, title, progress, currentStep, error }) => {
   const steps = [
-    "Uploading audio to server",
-    "Running Whisper transcription",
-    "Extracting tags and entities",
-    "Identifying tasks and decisions",
+    "Loading Whisper model",
+    "Transcribing audio",
+    "Detecting speakers",
+    "Extracting tags & tasks",
     "Done!",
   ];
 
@@ -337,30 +337,54 @@ export default function RecordMeeting({ navigate: navProp, dark: darkProp, setDa
     setProcessStep(0);
 
     try {
-      // Step 1: Uploading
-      setProcessStep(0);
-      setProcessProgress(15);
-      await new Promise(r => setTimeout(r, 400));
+      // Real progress callback — driven by backend polling
+      const onProgress = ({ status, progress, step, model_loaded }) => {
+        setProcessProgress(progress || 0);
 
-      // Step 2: Whisper
-      setProcessStep(1);
-      setProcessProgress(35);
+        // Map backend status to frontend step (0-4)
+        const stepMap = {
+          starting:       0,
+          pending:        0,
+          loading_model:  0,
+          transcribing:   1,
+          diarizing:      2,
+          tagging:        3,
+          done:           4,
+        };
+        if (status in stepMap) setProcessStep(stepMap[status]);
+      };
 
-      const result = await transcribeAudio(blob, filename);
+      // Pass participant count as a speaker count hint — much more accurate
+      // when user knows how many people are in the meeting.
+      const expectedSpeakers = participants.length > 0 ? participants.length : null;
 
-      // Step 3: Tags
-      setProcessStep(2);
-      setProcessProgress(70);
-      await new Promise(r => setTimeout(r, 400));
+      const result = await transcribeAudio(blob, filename, onProgress, { expectedSpeakers });
 
-      // Step 4: Tasks
-      setProcessStep(3);
-      setProcessProgress(90);
-      await new Promise(r => setTimeout(r, 400));
-
-      // Step 5: Done
+      // Final step
       setProcessStep(4);
       setProcessProgress(100);
+
+      // ── Build participant list from REAL speakers in transcript ──
+      const speakerSet = new Set();
+      result.transcript.segments.forEach(seg => {
+        if (seg.speaker) speakerSet.add(seg.speaker);
+      });
+      const detectedSpeakers = Array.from(speakerSet);
+
+      // Calculate actual talk time per speaker
+      const speakerStats = {};
+      result.transcript.segments.forEach(seg => {
+        const sp = seg.speaker || "Speaker 1";
+        if (!speakerStats[sp]) speakerStats[sp] = { wordCount: 0, duration: 0 };
+        speakerStats[sp].wordCount += seg.text.split(/\s+/).filter(Boolean).length;
+        speakerStats[sp].duration  += (seg.end - seg.start);
+      });
+
+      // Use detected speakers as participants (real, not hardcoded)
+      // User can rename them later
+      const realParticipants = detectedSpeakers.length > 0
+        ? detectedSpeakers
+        : (participants.length > 0 ? participants : ["Speaker 1"]);
 
       // Build meeting object for the detail page
       const meeting = {
@@ -371,7 +395,8 @@ export default function RecordMeeting({ navigate: navProp, dark: darkProp, setDa
         duration:     `${Math.round(result.transcript.duration / 60)}m`,
         wordCount:    result.transcript.word_count,
         language:     result.transcript.language,
-        participants: participants,
+        participants: realParticipants,
+        speakerStats: speakerStats,
         tags:         [...new Set([...tags, ...result.tagging.auto_tags])],
         transcript:   result.transcript.segments,
         fullText:     result.transcript.full_text,
@@ -383,7 +408,7 @@ export default function RecordMeeting({ navigate: navProp, dark: darkProp, setDa
       // Store and navigate after 1s
       setTimeout(() => {
         if (navProp) navProp("detail", meeting);
-      }, 1000);
+      }, 800);
 
     } catch (err) {
       console.error(err);
