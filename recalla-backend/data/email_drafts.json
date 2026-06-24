@@ -1,0 +1,23 @@
+{
+  "26353805-545": {
+    "id": "26353805-545",
+    "to": "muzammal@riphah.edu.pk",
+    "cc": "",
+    "subject": "API Bug Issue",
+    "body": "Hi Muzammal, I'm having some trouble with the API. There's a bug that I need your help with. Can we discuss this further? Best, Ammad",
+    "status": "sent",
+    "created_at": "2026-06-23T22:49:01.658940",
+    "sent_at": "2026-06-23T22:49:20.592272",
+    "gmail_id": "19ef599d7f891415"
+  },
+  "5d030a64-233": {
+    "id": "5d030a64-233",
+    "to": "muzammal@riphah.edu.pk",
+    "cc": "",
+    "subject": "API Bug in Recalla",
+    "body": "Hi Muzammal, I'm having some issues with the API in Recalla. Could you please help me resolve this bug? Thanks, Ammad",
+    "status": "cancelled",
+    "created_at": "2026-06-23T22:50:05.049687",
+    "cancelled_at": "2026-06-23T22:50:11.198529"
+  }
+}
