@@ -1,7 +1,7 @@
 // ============================================================
 // FILE PATH:  recalla/src/Admin.jsx
 // PURPOSE:    Admin panel — user management + activity log + system status.
-//             Uses red as accent to distinguish from main app emerald.
+//             Uses red as accent to distinguish from main app emerald..
 // ============================================================
 
 import { useState } from "react";
