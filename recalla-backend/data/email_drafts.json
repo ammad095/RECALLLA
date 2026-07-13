@@ -19,5 +19,41 @@
     "status": "cancelled",
     "created_at": "2026-06-23T22:50:05.049687",
     "cancelled_at": "2026-06-23T22:50:11.198529"
+  },
+  "f7412c39-98e": {
+    "id": "f7412c39-98e",
+    "to": "ammada342@gmail.com",
+    "cc": "",
+    "subject": "Hello",
+    "body": "Hello, I hope you are doing well.",
+    "status": "pending",
+    "created_at": "2026-06-24T10:16:55.396908"
+  },
+  "a9f27b18-da8": {
+    "id": "a9f27b18-da8",
+    "to": "recipient@example.com",
+    "cc": "",
+    "subject": "Test Email",
+    "body": "This is a test email.",
+    "status": "pending",
+    "created_at": "2026-06-24T10:17:20.957747"
+  },
+  "e317bade-f17": {
+    "id": "e317bade-f17",
+    "to": "recipient@example.com",
+    "cc": "",
+    "subject": "Test Email",
+    "body": "This is a test email.",
+    "status": "pending",
+    "created_at": "2026-06-24T10:17:21.747919"
+  },
+  "f3fd177e-29c": {
+    "id": "f3fd177e-29c",
+    "to": "muzammal@riphah.edu.pk",
+    "cc": "",
+    "subject": "API Bug Issue",
+    "body": "Hi Muzammal, I wanted to reach out to you about the API bug that weve been experiencing. Can we schedule a time to discuss this further",
+    "status": "pending",
+    "created_at": "2026-06-24T10:18:30.594311"
   }
 }
