@@ -28,5 +28,45 @@
     "notes": "",
     "completed": false,
     "created_at": "2026-06-24T10:54:36.987828"
+  },
+  {
+    "id": "85f4efe8",
+    "title": "Call Ammad",
+    "datetime": "2026-08-18T17:00:00",
+    "priority": "medium",
+    "category": "personal",
+    "notes": "",
+    "completed": false,
+    "created_at": "2026-08-17T15:58:31.297947"
+  },
+  {
+    "id": "e29c538f",
+    "title": "Submit FYP report",
+    "datetime": "2026-08-19T15:00:00+05:00",
+    "priority": "medium",
+    "category": "task",
+    "notes": "",
+    "completed": false,
+    "created_at": "2026-08-17T16:34:13.056461"
+  },
+  {
+    "id": "6ee53083",
+    "title": "Friend's birthday",
+    "datetime": "2026-09-04T00:00:00",
+    "priority": "medium",
+    "category": "personal",
+    "notes": "",
+    "completed": false,
+    "created_at": "2026-08-27T15:25:19.508628"
+  },
+  {
+    "id": "e98a1525",
+    "title": "Meeting reminder",
+    "datetime": "2026-08-29T15:00:00",
+    "priority": "medium",
+    "category": "meeting",
+    "notes": "",
+    "completed": false,
+    "created_at": "2026-08-28T14:21:42.652418"
   }
 ]

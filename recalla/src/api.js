@@ -1,6 +1,5 @@
 // ── RECALLA API Service ──────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8001/api/meetings";
-const HEALTH_URL = "http://localhost:8001/health";
+import { API_MEETINGS as API_BASE, HEALTH_URL } from "./config";
 
 /**
  * Start async transcription with optional speaker count hint.
@@ -73,6 +72,62 @@ export async function tagText(text) {
   });
   if (!response.ok) throw new Error("Tagging failed");
   return response.json();
+}
+
+// ── Live session API ─────────────────────────────────────────────────────────
+// Audio windows are streamed while recording, so the transcript is already
+// built when the user stops. See recalla-backend/models/live_session.py.
+
+/** Open a live session. Returns { session_id, window_seconds, step_seconds, model }. */
+export async function startLiveSession(expectedSpeakers = null) {
+  const r = await fetch(`${API_BASE}/session/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expected_speakers: expectedSpeakers }),
+  });
+  if (!r.ok) throw new Error("Could not start live session");
+  return r.json();
+}
+
+/**
+ * Send one audio window.
+ * `offset` is the window's absolute start time in seconds — the recorder is the
+ * only reliable source for this, since Whisper trims silence and the server
+ * cannot infer true position from transcript length.
+ */
+export async function sendLiveChunk(sessionId, blob, { offset, isFirst = false, filename = "chunk.wav" }) {
+  const fd = new FormData();
+  fd.append("audio", blob, filename);
+  fd.append("is_first", isFirst ? "true" : "false");
+  fd.append("offset", String(offset));
+  const r = await fetch(`${API_BASE}/session/${sessionId}/chunk`, { method: "POST", body: fd });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({ detail: "Chunk upload failed" }));
+    throw new Error(e.detail || "Chunk upload failed");
+  }
+  return r.json();
+}
+
+/** Stop the session: global speaker clustering + tagging. Fast (~1s). */
+export async function finalizeLiveSession(sessionId, refine = true) {
+  const r = await fetch(`${API_BASE}/session/${sessionId}/finalize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refine }),
+  });
+  if (!r.ok) throw new Error("Finalize failed");
+  return r.json();
+}
+
+/** Poll the background high-accuracy pass. */
+export async function getRefineStatus(sessionId) {
+  const r = await fetch(`${API_BASE}/session/${sessionId}/refine`);
+  if (!r.ok) throw new Error("Refine status failed");
+  return r.json();
+}
+
+export async function deleteLiveSession(sessionId) {
+  try { await fetch(`${API_BASE}/session/${sessionId}`, { method: "DELETE" }); } catch { /* best effort */ }
 }
 
 /** Check if backend is reachable. */

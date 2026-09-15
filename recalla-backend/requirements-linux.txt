@@ -1,0 +1,41 @@
+# Recalla backend — Linux / Python 3.12
+# The original requirements.txt is a UTF-16 Windows `pip freeze` dump and is
+# missing several packages the code actually imports (groq, python-dotenv,
+# librosa, scikit-learn, google-*). Use this file on Linux.
+#
+# Install torch first from the CPU index (no NVIDIA GPU on this machine):
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements-linux.txt
+
+# ── Web framework ────────────────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+python-multipart          # required for UploadFile / Form
+pydantic
+
+# ── Transcription (models/transcription.py) ──────────────────────────────────
+openai-whisper            # provides `import whisper`; needs torch + ffmpeg CLI
+numpy
+
+# ── Speaker diarization (models/diarization.py) ──────────────────────────────
+librosa
+scikit-learn
+soundfile
+
+# ── NLP tagging (models/tagging.py) ──────────────────────────────────────────
+spacy
+# spaCy English model — installed separately:
+#   python -m spacy download en_core_web_sm
+
+# ── LLM: summarization + agent (models/groq_client.py) ───────────────────────
+groq
+python-dotenv
+
+# ── Google Calendar + Gmail tools (tools/google_client.py) ───────────────────
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+chromadb==1.5.9
+sentence-transformers==6.0.1
+apscheduler==3.11.3

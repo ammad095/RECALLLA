@@ -8,11 +8,14 @@
 Agent API endpoints.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List
 
+from auth.deps import get_current_user
+from auth.context import acting_as
+from db.models import User
 from models.agent import run_agent
 from models.summarization import summarize_meeting, generate_key_points
 from models.groq_client import is_groq_available
@@ -49,27 +52,32 @@ class CreateReminderRequest(BaseModel):
 
 # ── Health check ─────────────────────────────────────────────────────────────
 @router.get("/status")
-def agent_status():
-    """Check what's configured."""
+def agent_status(user: User = Depends(get_current_user)):
+    """What this particular user can currently do."""
+    with acting_as(user.id):
+        google = is_google_configured()
     return {
         "groq_configured":   is_groq_available(),
-        "google_configured": is_google_configured(),
+        "google_configured": google,
         "available_tools": [
-            "reminders",
-            *(["calendar", "email"] if is_google_configured() else []),
+            "reminders", "desktop",
+            *(["calendar", "email"] if google else []),
         ],
     }
 
 
 # ── Main chat endpoint ───────────────────────────────────────────────────────
 @router.post("/chat")
-def agent_chat(req: AgentChatRequest):
+def agent_chat(req: AgentChatRequest, user: User = Depends(get_current_user)):
     """Send a message to the agent. Returns response + actions + history."""
     if not is_groq_available():
         raise HTTPException(status_code=503, detail="Groq API not configured.")
 
     try:
-        result = run_agent(user_message=req.message, conversation_history=req.history or [])
+        # Scope every tool the model reaches for to this account, so email and
+        # calendar act on the caller's own Google connection.
+        with acting_as(user.id):
+            result = run_agent(user_message=req.message, conversation_history=req.history or [])
         return JSONResponse(result)
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -81,13 +89,20 @@ def agent_chat(req: AgentChatRequest):
 
 # ── Summarization ────────────────────────────────────────────────────────────
 @router.post("/summarize")
-def summarize(req: SummarizeRequest):
+def summarize(req: SummarizeRequest, user: User = Depends(get_current_user)):
     if not is_groq_available():
         raise HTTPException(status_code=503, detail="Groq not configured")
     try:
-        result = summarize_meeting(req.transcript)
-        if req.include_key_points:
-            result["key_points"] = generate_key_points(req.transcript)
+        with acting_as(user.id):
+            result = summarize_meeting(req.transcript)
+            if req.include_key_points:
+                # Bullets are an extra. If they fail, still return the summary
+                # rather than turning a good response into a 500.
+                try:
+                    result["key_points"] = generate_key_points(req.transcript)
+                except Exception as e:
+                    print(f"[Recalla] Key points skipped: {e}")
+                    result["key_points"] = []
         return JSONResponse({"success": True, **result})
     except Exception as e:
         import traceback
@@ -97,39 +112,52 @@ def summarize(req: SummarizeRequest):
 
 # ── Reminder CRUD ───────────────────────────────────────────────────────────
 @router.get("/reminders")
-def get_reminders(status: str = "pending", limit: int = 50):
-    return list_reminders_fn(filter_status=status, limit=limit)
+def get_reminders(status: str = "pending", limit: int = 50,
+                  user: User = Depends(get_current_user)):
+    with acting_as(user.id):
+        return list_reminders_fn(filter_status=status, limit=limit)
 
 
 @router.post("/reminders")
-def add_reminder(req: CreateReminderRequest):
-    return create_reminder(
-        title=req.title, datetime_iso=req.datetime_iso, priority=req.priority,
-        category=req.category, notes=req.notes,
-    )
+def add_reminder(req: CreateReminderRequest, user: User = Depends(get_current_user)):
+    with acting_as(user.id):
+        return create_reminder(
+            title=req.title, datetime_iso=req.datetime_iso, priority=req.priority,
+            category=req.category, notes=req.notes,
+        )
 
 
 @router.patch("/reminders/{reminder_id}/complete")
-def mark_reminder_complete(reminder_id: str):
-    return complete_reminder(reminder_id)
+def mark_reminder_complete(reminder_id: str, user: User = Depends(get_current_user)):
+    with acting_as(user.id):
+        return complete_reminder(reminder_id)
 
 
 @router.delete("/reminders/{reminder_id}")
-def remove_reminder(reminder_id: str):
-    return delete_reminder(reminder_id)
+def remove_reminder(reminder_id: str, user: User = Depends(get_current_user)):
+    with acting_as(user.id):
+        return delete_reminder(reminder_id)
 
 
 # ── Email draft confirmation ─────────────────────────────────────────────────
 @router.post("/send-draft/{draft_id}")
-def send_draft(draft_id: str):
-    """User clicked Send on a drafted email — actually deliver it via Gmail."""
-    result = send_email_draft(draft_id)
+def send_draft(draft_id: str, user: User = Depends(get_current_user)):
+    """
+    User clicked Send on a drafted email — actually deliver it via Gmail.
+
+    acting_as matters here: Gmail credentials are looked up per account, and
+    without it the send falls through to the server's own .env token, which
+    reports "not connected" no matter how well the user linked Google.
+    """
+    with acting_as(user.id):
+        result = send_email_draft(draft_id)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Send failed"))
     return result
 
 
 @router.delete("/draft/{draft_id}")
-def cancel_draft(draft_id: str):
+def cancel_draft(draft_id: str, user: User = Depends(get_current_user)):
     """User clicked Cancel on a drafted email."""
-    return cancel_email_draft(draft_id)
+    with acting_as(user.id):
+        return cancel_email_draft(draft_id)
