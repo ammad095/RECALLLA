@@ -7,7 +7,7 @@
 import { useState, useEffect } from "react";
 import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
 import Sidebar from "./Sidebar";
-import { listReminders, createReminder, completeReminder, deleteReminder } from "./agent_api";
+import { listReminders, createReminder, completeReminder, deleteReminder } from "./data_api";
 
 const PRIORITY_COLOR = {
   high:   COLORS.red,
@@ -232,7 +232,7 @@ const AddInline = ({ onClose, onCreated }) => {
 };
 
 // ── Main ──────────────────────────────────────────────────────────────────
-export default function Reminders({ navigate }) {
+export default function Reminders({ navigate, user }) {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [filter, setFilter]       = useState("pending"); // pending | completed | all
@@ -271,7 +271,7 @@ export default function Reminders({ navigate }) {
     <>
       <style>{GLOBAL_CSS}</style>
       <div style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="reminders" navigate={navigate}/>
+        <Sidebar active="reminders" navigate={navigate} user={user}/>
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Header */}

@@ -8,6 +8,9 @@ import { useState, useEffect } from "react";
 import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
 import Sidebar from "./Sidebar";
 import { summarizeTranscript } from "./agent_api";
+import { getRefineStatus } from "./api";
+import { getMeeting, updateMeeting, getExtracted, extractMeeting, getSettings } from "./data_api";
+import { fmtWhen, fmtDuration } from "./format";
 
 const SPEAKER_COLORS = [COLORS.emerald, COLORS.violet, COLORS.cyan, COLORS.amber];
 
@@ -17,30 +20,107 @@ const fmtTime = (sec) => {
   return `${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`;
 };
 
-export default function MeetingDetail({ navigate, meeting }) {
+export default function MeetingDetail({ navigate, meeting , user }) {
   const [tab, setTab]                 = useState("summary");
   const [summary, setSummary]         = useState(null);
+  const [tasks, setTasks]             = useState([]);
+  const [decisions, setDecisions]     = useState([]);
+  const [extracting, setExtracting]   = useState(false);
+  // "Write a summary after each meeting" is a real setting; honour it for the
+  // automatic pass. The Generate button always works regardless.
+  const [autoSummary, setAutoSummary] = useState(true);
+  useEffect(() => {
+    getSettings().then(s => setAutoSummary(s.auto_summary ?? true)).catch(() => {});
+  }, []);
   const [keyPoints, setKeyPoints]     = useState([]);
   const [generating, setGenerating]   = useState(false);
   const [genError, setGenError]       = useState(null);
 
-  // Auto-generate AI summary on first load
+  // Live recordings are transcribed with the fast model while the meeting runs;
+  // a slower, more accurate pass then re-runs server-side. Poll for it and swap
+  // the transcript in when it lands.
+  const [segments, setSegments]       = useState(meeting?.transcript || []);
+  const [refine, setRefine]           = useState(null);
+  const [full, setFull]               = useState(meeting);
+
+  // Prefer the freshly-loaded record; fall back to whatever was passed in.
+  const M = full || meeting;
+
+  // The meetings list only passes an id, so fetch the rest from the database.
+  const meetingId = meeting?.id;
+  const hasTranscript = Boolean(meeting?.transcript);
+
   useEffect(() => {
-    if (!meeting?.fullText) return;
-    // If already has a summary stored, skip
-    if (meeting.aiSummary) { setSummary(meeting.aiSummary); setKeyPoints(meeting.keyPoints || []); return; }
-    generateSummary();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!meetingId || hasTranscript) return;
+    let alive = true;
+    getMeeting(meetingId)
+      .then((m) => {
+        if (!alive) return;
+        setFull({
+          ...m,
+          date: fmtWhen(m.started_at),
+          duration: fmtDuration(m.duration_seconds),
+          wordCount: m.word_count,
+          fullText: m.full_text,
+          aiSummary: m.summary,
+          keyPoints: m.key_points || [],
+          transcript: m.segments,
+          tagging: m.tagging,
+          sessionId: m.live_session_id,
+          liveMode: m.refine_status === "running",
+        });
+        setSegments(m.segments || []);
+        if (m.summary) { setSummary(m.summary); setKeyPoints(m.key_points || []); }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [meetingId, hasTranscript]);
+
+  useEffect(() => {
+    const sid = meeting?.sessionId;
+    if (!sid || !meeting?.liveMode) return;
+
+    let alive = true;
+    let tries = 0;
+
+    const tick = async () => {
+      if (!alive || tries++ > 240) return;        // stop after ~20 min
+      try {
+        const r = await getRefineStatus(sid);
+        if (!alive) return;
+        setRefine(r.refine);
+        if (r.refine?.status === "done" && r.segments?.length) {
+          setSegments(r.segments);
+          if (meeting?.id) {
+            updateMeeting(meeting.id, {
+              segments: r.segments, transcript_model: "small",
+            }).catch(() => {});
+          }
+        } else if (r.refine?.status === "running" || r.refine?.status === "idle") {
+          setTimeout(tick, 5000);
+        }
+      } catch { /* session expired or backend restarted */ }
+    };
+
+    tick();
+    return () => { alive = false; };
+  }, [meeting?.sessionId, meeting?.liveMode]);
 
   const generateSummary = async () => {
-    if (!meeting?.fullText) return;
+    if (!M?.fullText) return;
     setGenerating(true);
     setGenError(null);
     try {
-      const res = await summarizeTranscript(meeting.fullText, true);
+      const res = await summarizeTranscript(M.fullText, true);
       setSummary(res.summary);
       setKeyPoints(res.key_points || []);
+
+      // Store it, so reopening the meeting shows the summary instantly rather
+      // than paying for the same generation again.
+      if (M.id) {
+        updateMeeting(M.id, { summary: res.summary, key_points: res.key_points || [] })
+          .catch(() => {});
+      }
     } catch (e) {
       setGenError(e.message);
     } finally {
@@ -48,12 +128,49 @@ export default function MeetingDetail({ navigate, meeting }) {
     }
   };
 
-  if (!meeting) {
+  const runExtract = async (force = false) => {
+    if (!M?.id || !M?.fullText) return;
+    setExtracting(true);
+    try {
+      const r = force ? await extractMeeting(M.id) : await getExtracted(M.id);
+      // Nothing stored yet — pay for the extraction once, then it is cached.
+      if (!force && !(r.tasks?.length || r.decisions?.length)) {
+        const fresh = await extractMeeting(M.id);
+        setTasks(fresh.tasks || []); setDecisions(fresh.decisions || []);
+      } else {
+        setTasks(r.tasks || []); setDecisions(r.decisions || []);
+      }
+    } catch { /* the tab just stays empty */ }
+    finally { setExtracting(false); }
+  };
+
+  useEffect(() => { runExtract(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [M?.id, M?.fullText]);
+
+  // Generate the summary once the meeting has actually loaded.
+  //
+  // The meeting arrives from a fetch, so on the first render M is still null
+  // and there is nothing to summarise. With an empty dependency list this
+  // effect bailed on that first pass and never ran again — which is why no
+  // summary ever appeared. Depend on the meeting id instead.
+  useEffect(() => {
+    if (!M?.fullText) return;
+    if (M.aiSummary) { setSummary(M.aiSummary); setKeyPoints(M.keyPoints || []); return; }
+    if (!autoSummary) return;
+    generateSummary();
+    // autoSummary is a dependency because settings arrive from their own
+    // fetch — without it, a meeting that loads first would never summarise.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [M?.id, M?.fullText, autoSummary]);
+
+
+  if (!M) {
     return (
       <>
         <style>{GLOBAL_CSS}</style>
         <div style={{ display: "flex", height: "100vh", background: COLORS.bg }}>
-          <Sidebar active="meetings" navigate={navigate}/>
+          <Sidebar active="meetings" navigate={navigate} user={user}/>
           <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontFamily: FONTS.heading, fontSize: 38, marginBottom: 12 }}>No meeting selected</div>
@@ -77,9 +194,9 @@ export default function MeetingDetail({ navigate, meeting }) {
   }
 
   // Build speaker list from segments
-  const speakers = [...new Set((meeting.transcript || []).map(s => s.speaker || "Speaker 1"))];
+  const speakers = [...new Set((segments || []).map(s => s.speaker || "Speaker 1"))];
   const speakerStats = {};
-  (meeting.transcript || []).forEach(seg => {
+  (segments || []).forEach(seg => {
     const sp = seg.speaker || "Speaker 1";
     if (!speakerStats[sp]) speakerStats[sp] = { words: 0, duration: 0 };
     speakerStats[sp].words    += (seg.text || "").split(/\s+/).filter(Boolean).length;
@@ -91,7 +208,7 @@ export default function MeetingDetail({ navigate, meeting }) {
     <>
       <style>{GLOBAL_CSS}</style>
       <div style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="meetings" navigate={navigate}/>
+        <Sidebar active="meetings" navigate={navigate} user={user}/>
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Header */}
@@ -120,13 +237,13 @@ export default function MeetingDetail({ navigate, meeting }) {
                 textTransform: "uppercase", letterSpacing: "0.01em",
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}>
-                {meeting.title || "Untitled Meeting"}
+                {M.title || "Untitled Meeting"}
               </div>
               <div style={{
                 fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
                 marginTop: 4, textTransform: "uppercase", letterSpacing: "0.1em",
               }}>
-                {meeting.date} · {meeting.duration} · {meeting.wordCount} words · {speakers.length} speaker{speakers.length !== 1 ? "s" : ""}
+                {M.date} · {M.duration} · {M.wordCount} words · {speakers.length} speaker{speakers.length !== 1 ? "s" : ""}
               </div>
             </div>
           </header>
@@ -138,6 +255,7 @@ export default function MeetingDetail({ navigate, meeting }) {
           }}>
             {[
               { id: "summary",    label: "Summary" },
+              { id: "actions",    label: "Tasks & Decisions" },
               { id: "transcript", label: "Transcript" },
               { id: "speakers",   label: "Speakers" },
             ].map(t => (
@@ -173,7 +291,7 @@ export default function MeetingDetail({ navigate, meeting }) {
                     display: "flex", alignItems: "center", gap: 6,
                   }}>
                     <span className="status-dot" style={{ background: generating ? COLORS.amber : COLORS.emerald, animationDuration: generating ? "0.6s" : "2s" }}/>
-                    {generating ? "Groq generating..." : "AI Summary · Llama 3.3"}
+                    {generating ? "Writing the summary…" : "Summary"}
                   </div>
 
                   <div className="corners" style={{
@@ -244,9 +362,118 @@ export default function MeetingDetail({ navigate, meeting }) {
               )}
 
               {/* TRANSCRIPT TAB */}
+              {/* TASKS & DECISIONS TAB */}
+              {tab === "actions" && (
+                <div style={{ display: "grid", gap: 22 }}>
+                  <Extracted
+                    title="Action items"
+                    empty={extracting ? "Reading the meeting…" : "No commitments were made in this meeting."}
+                    items={tasks}
+                    render={(t, i) => (
+                      <li key={i} style={{
+                        display: "flex", gap: 11, alignItems: "flex-start",
+                        padding: "11px 13px", borderRadius: 10, marginBottom: 8,
+                        background: COLORS.surface, border: `1px solid ${COLORS.border}`,
+                      }}>
+                        <span style={{
+                          width: 6, height: 6, borderRadius: 999, marginTop: 7, flexShrink: 0,
+                          background: t.priority === "high" ? COLORS.red
+                                    : t.priority === "low" ? COLORS.textTertiary
+                                    : COLORS.amber,
+                        }} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 13.5, color: COLORS.textPrimary, lineHeight: 1.5 }}>
+                            {t.text}
+                          </div>
+                          {(t.assignee || t.due) && (
+                            <div style={{
+                              fontFamily: FONTS.mono, fontSize: 10.5, marginTop: 4,
+                              color: COLORS.textTertiary, display: "flex", gap: 12,
+                            }}>
+                              {t.assignee && <span>{t.assignee}</span>}
+                              {t.due && <span style={{ color: COLORS.amber }}>due {t.due}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    )}
+                  />
+
+                  <Extracted
+                    title="Decisions"
+                    empty={extracting ? "…" : "No decisions were settled in this meeting."}
+                    items={decisions}
+                    render={(d, i) => (
+                      <li key={i} style={{
+                        padding: "11px 13px", borderRadius: 10, marginBottom: 8,
+                        background: COLORS.surface,
+                        border: `1px solid ${COLORS.border}`,
+                        borderLeft: `2px solid ${COLORS.emerald}`,
+                      }}>
+                        <div style={{ fontSize: 13.5, color: COLORS.textPrimary, lineHeight: 1.5 }}>
+                          {d.text}
+                        </div>
+                        {d.context && (
+                          <div style={{ fontSize: 12, color: COLORS.textTertiary, marginTop: 4, lineHeight: 1.5 }}>
+                            {d.context}
+                          </div>
+                        )}
+                      </li>
+                    )}
+                  />
+
+                  <button
+                    onClick={() => runExtract(true)}
+                    disabled={extracting}
+                    className="press"
+                    style={{
+                      alignSelf: "start", background: "transparent",
+                      border: `1px solid ${COLORS.border}`, color: COLORS.textSecondary,
+                      padding: "7px 15px", borderRadius: 999, cursor: "pointer",
+                      fontFamily: FONTS.mono, fontSize: 11,
+                      textTransform: "uppercase", letterSpacing: "0.1em",
+                    }}
+                  >
+                    {extracting ? "Reading…" : "Re-read meeting"}
+                  </button>
+                </div>
+              )}
+
               {tab === "transcript" && (
                 <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {(meeting.transcript || []).map((seg, i) => {
+
+                  {/* Second-pass status — only for live recordings */}
+                  {refine && refine.status !== "idle" && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 9,
+                      padding: "9px 13px", borderRadius: 10,
+                      background: COLORS.surface,
+                      border: `1px solid ${refine.status === "done" ? COLORS.borderEmerald : COLORS.border}`,
+                      fontFamily: FONTS.mono, fontSize: 10,
+                      letterSpacing: "0.1em", textTransform: "uppercase",
+                      color: refine.status === "done" ? COLORS.emerald : COLORS.textSecondary,
+                    }}>
+                      {refine.status === "running" && (
+                        <>
+                          <span className="status-dot" style={{ background: COLORS.amber }} />
+                          Improving accuracy in background · {refine.progress}%
+                        </>
+                      )}
+                      {refine.status === "done" && (
+                        <>
+                          <span style={{ fontSize: 12 }}>✓</span>
+                          Transcript refined for accuracy
+                        </>
+                      )}
+                      {refine.status === "error" && (
+                        <span style={{ color: COLORS.textTertiary }}>
+                          Kept the live transcript — second pass unavailable
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {(segments || []).map((seg, i) => {
                     const spIdx = speakers.indexOf(seg.speaker);
                     const color = SPEAKER_COLORS[spIdx % SPEAKER_COLORS.length];
                     return (
@@ -312,5 +539,21 @@ export default function MeetingDetail({ navigate, meeting }) {
         </main>
       </div>
     </>
+  );
+}
+
+function Extracted({ title, items, empty, render }) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: FONTS.mono, fontSize: 10, letterSpacing: "0.12em",
+        textTransform: "uppercase", color: COLORS.textTertiary, marginBottom: 10,
+      }}>
+        {title}{items.length ? ` · ${items.length}` : ""}
+      </div>
+      {items.length === 0
+        ? <div style={{ fontSize: 13, color: COLORS.textTertiary }}>{empty}</div>
+        : <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>{items.map(render)}</ul>}
+    </div>
   );
 }

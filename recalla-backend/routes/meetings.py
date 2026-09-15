@@ -15,11 +15,14 @@ from models.transcription import (
     is_model_loaded,
 )
 from models.tagging import extract_tags_and_entities
+from models import live_session as live
 
 router = APIRouter()
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+ALLOWED_EXT = {".mp3", ".mp4", ".wav", ".m4a", ".ogg", ".webm"}
 
 
 def process_audio_background(file_path: str, job_id: str, hint_speakers: int = None):
@@ -158,6 +161,108 @@ async def transcribe_meeting(
         if os.path.exists(file_path):
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── LIVE SESSION ─────────────────────────────────────────────────────────────
+# Audio windows are streamed while the meeting is still recording, so the
+# transcript is already built by the time the user stops. See
+# models/live_session.py for the window geometry and reasoning.
+
+@router.post("/session/start")
+async def session_start(payload: dict = None):
+    payload = payload or {}
+    hint = payload.get("expected_speakers")
+    try:
+        hint = int(hint) if hint else None
+        if hint is not None and hint < 1:
+            hint = None
+    except (TypeError, ValueError):
+        hint = None
+
+    live.cleanup_stale()
+    sid = live.create_session(hint_speakers=hint)
+    return JSONResponse({
+        "success": True,
+        "session_id": sid,
+        "window_seconds": live.WINDOW,
+        "step_seconds": live.STEP,
+        "model": live.LIVE_MODEL,
+    })
+
+
+@router.post("/session/{session_id}/chunk")
+async def session_chunk(
+    session_id: str,
+    audio: UploadFile = File(...),
+    is_first: bool = Form(False),
+    offset: float = Form(None),   # absolute start time of this window, from the recorder
+):
+    s = live.get_session(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if s["status"] not in ("recording", "finalizing"):
+        raise HTTPException(status_code=409, detail=f"Session is {s['status']}")
+
+    ext = os.path.splitext(audio.filename or "")[1].lower() or ".wav"
+    if ext not in ALLOWED_EXT:
+        raise HTTPException(status_code=400, detail=f"File type {ext} not supported.")
+
+    path = os.path.join(live.SESSION_DIR, f"{session_id}_{s['chunk_count']:04d}{ext}")
+    with open(path, "wb") as f:
+        shutil.copyfileobj(audio.file, f)
+
+    try:
+        state, new_segments = live.process_chunk(
+            session_id, path, is_first=bool(is_first), offset=offset
+        )
+        return JSONResponse({"success": True, "new_segments": new_segments, **state})
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/session/{session_id}")
+async def session_state(session_id: str):
+    s = live.get_session(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return JSONResponse(live._public(s))
+
+
+@router.post("/session/{session_id}/finalize")
+async def session_finalize(session_id: str, payload: dict = None):
+    s = live.get_session(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    payload = payload or {}
+    result = live.finalize_session(session_id)
+
+    if payload.get("refine", True) and result.get("status") == "done":
+        live.start_refine(session_id)
+        result["refine"] = s["refine"]
+
+    return JSONResponse({"success": result.get("status") == "done", **result})
+
+
+@router.get("/session/{session_id}/refine")
+async def session_refine_status(session_id: str):
+    s = live.get_session(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return JSONResponse({
+        "success": True,
+        "refine": s["refine"],
+        "segments": s["segments"],
+        "full_text": s["full_text"],
+        "tagging": s["tagging"],
+    })
+
+
+@router.delete("/session/{session_id}")
+async def session_delete(session_id: str):
+    live.delete_session(session_id)
+    return JSONResponse({"success": True})
 
 
 # ── 5. Tag text only ─────────────────────────────────────────────────────────

@@ -1,10 +1,38 @@
 import os
 import glob
+import shutil
+import sys
 import whisper
 import uuid
 
+# Use every core — this box is CPU-only, so threading is the whole ballgame.
+try:
+    import torch
+    torch.set_num_threads(max(1, os.cpu_count() or 1))
+except Exception:
+    pass
+
 # ── Dynamic ffmpeg path detection ─────────────────────────────────────────────
 def find_ffmpeg():
+    # Already on PATH (any OS)? Use it.
+    found = shutil.which("ffmpeg")
+    if found:
+        return os.path.dirname(found)
+
+    # POSIX: common install locations, incl. pip/user-local installs
+    if os.name != "nt":
+        for path in (
+            os.path.expanduser("~/.local/bin"),
+            "/usr/local/bin",
+            "/usr/bin",
+            "/snap/bin",
+            "/opt/homebrew/bin",
+        ):
+            if os.path.exists(os.path.join(path, "ffmpeg")):
+                return path
+        return None
+
+    # Windows
     user = os.environ.get("USERNAME", "")
     winget_pattern = rf"C:\Users\{user}\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg.Essentials*\ffmpeg-*-essentials_build\bin"
     matches = glob.glob(winget_pattern)
@@ -31,23 +59,39 @@ ffmpeg_dir = find_ffmpeg()
 if ffmpeg_dir:
     os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
     print(f"[Recalla] ffmpeg found at: {ffmpeg_dir}")
-else:
+elif os.name == "nt":
     print("[Recalla] WARNING: ffmpeg not found. Install via: winget install \"FFmpeg (Essentials Build)\"")
+else:
+    print("[Recalla] WARNING: ffmpeg not found. Install via: sudo apt install ffmpeg")
 
 
-# ── Lazy-loaded Whisper model ────────────────────────────────────────────────
-_model = None
+# ── Whisper models ───────────────────────────────────────────────────────────
+# Measured on this machine (i5-8250U, 8 threads, CPU only), real-time factor:
+#   tiny 0.23x | base 0.35x | small 1.06x
+# Anything at/above 1.0x cannot keep up with a live stream, so the live pass
+# uses BASE and the optional refinement pass uses SMALL.
+LIVE_MODEL   = "base"
+REFINE_MODEL = "small"
 
-def get_model():
-    global _model
-    if _model is None:
-        print("[Recalla] Loading Whisper model (small)... ~30s on first run")
-        _model = whisper.load_model("small")
-        print("[Recalla] Model loaded successfully.")
-    return _model
+_models = {}
 
-def is_model_loaded():
-    return _model is not None
+def get_model(name: str = REFINE_MODEL):
+    """Load (and cache) a Whisper model by name."""
+    if name not in _models:
+        print(f"[Recalla] Loading Whisper model ({name})...")
+        _models[name] = whisper.load_model(name)
+        print(f"[Recalla] Model '{name}' loaded.")
+    return _models[name]
+
+def is_model_loaded(name: str = REFINE_MODEL):
+    return name in _models
+
+def free_model(name: str):
+    """Drop a model to reclaim RAM (this box only has ~4GB free)."""
+    if name in _models:
+        del _models[name]
+        import gc; gc.collect()
+        print(f"[Recalla] Model '{name}' unloaded.")
 
 
 # ── Job tracking ─────────────────────────────────────────────────────────────
@@ -74,20 +118,22 @@ def delete_job(job_id):
 
 
 # ── Main transcription pipeline ──────────────────────────────────────────────
-def transcribe_audio(file_path: str, job_id: str = None, hint_speakers: int = None) -> dict:
+def transcribe_audio(file_path: str, job_id: str = None, hint_speakers: int = None,
+                     model_name: str = REFINE_MODEL) -> dict:
     """
     Transcribe audio + detect speakers.
     hint_speakers: optional expected number of speakers (forces diarization to this count)
+    model_name:    which Whisper model to use (see LIVE_MODEL / REFINE_MODEL)
     """
 
     # Step 0 — Load Whisper
     if job_id:
-        if not is_model_loaded():
+        if not is_model_loaded(model_name):
             update_job(job_id, status="loading_model", step=0, progress=8)
         else:
             update_job(job_id, status="loading_model", step=0, progress=15)
 
-    model = get_model()
+    model = get_model(model_name)
 
     # Step 1 — Whisper transcription
     if job_id:

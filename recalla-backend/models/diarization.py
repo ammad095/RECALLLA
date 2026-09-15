@@ -162,6 +162,87 @@ def _auto_detect_speakers(features, hint_speakers=None, max_speakers=5):
     return best_n
 
 
+# ── Incremental API (used by the live pipeline) ──────────────────────────────
+# Feature extraction is ~95% of diarization cost and is per-segment, so it can
+# run chunk-by-chunk while recording. Clustering must see every segment at once
+# (speaker identity is only meaningful globally), but on a few hundred feature
+# vectors that step takes milliseconds.
+
+def extract_features_for_window(wav, sr, segments, window_offset=0.0):
+    """
+    Extract speaker features for segments inside one audio window.
+
+    wav:            float32 mono samples for this window
+    segments:       segments whose start/end are ABSOLUTE meeting timestamps
+    window_offset:  absolute time (s) corresponding to wav[0]
+
+    Returns [(segment_index, feature_vector), ...] for segments long enough
+    to characterise. Segments that are too short are simply skipped.
+    """
+    out = []
+    for i, seg in enumerate(segments):
+        rel_start = seg["start"] - window_offset
+        rel_end   = seg["end"]   - window_offset
+        if rel_end - rel_start < 0.5:
+            continue
+        a = int(max(0.0, rel_start) * sr)
+        b = int(min(rel_end, len(wav) / sr) * sr)
+        if b - a < sr * 0.4:
+            continue
+        feats = _extract_features(wav[a:b], sr)
+        if feats is not None:
+            out.append((i, feats))
+    return out
+
+
+def cluster_speakers(feature_list, hint_speakers=None):
+    """
+    Global clustering over accumulated features.
+
+    feature_list: [(key, feature_vector), ...] gathered across the whole meeting
+    Returns {key: "Speaker N"}.
+    """
+    if not feature_list:
+        return {}
+    if len(feature_list) < 2:
+        return {feature_list[0][0]: "Speaker 1"}
+
+    from sklearn.cluster import AgglomerativeClustering
+    from sklearn.preprocessing import StandardScaler
+
+    keys     = [k for k, _ in feature_list]
+    features = np.array([f for _, f in feature_list])
+    normed   = StandardScaler().fit_transform(features)
+
+    n = _auto_detect_speakers(normed, hint_speakers=hint_speakers)
+    if n <= 1:
+        return {k: "Speaker 1" for k in keys}
+
+    labels = AgglomerativeClustering(
+        n_clusters=n, metric="euclidean", linkage="ward"
+    ).fit_predict(normed)
+
+    return {keys[i]: f"Speaker {int(labels[i]) + 1}" for i in range(len(keys))}
+
+
+def load_window(audio_path, sr=16000):
+    """Decode an audio file to mono float32 at `sr`. Returns (wav, sr) or (None, sr)."""
+    import librosa
+    wav_path = _convert_to_wav(audio_path)
+    if not wav_path:
+        return None, sr
+    try:
+        wav, _ = librosa.load(wav_path, sr=sr, mono=True)
+        return wav, sr
+    finally:
+        try:
+            os.remove(wav_path)
+        except Exception:
+            pass
+
+
+# ── Batch API (unchanged behaviour, used by the non-live upload path) ────────
+
 def diarize_segments(audio_path, segments, hint_speakers=None):
     """
     Add speaker labels using auto-detection. hint_speakers is treated as a soft

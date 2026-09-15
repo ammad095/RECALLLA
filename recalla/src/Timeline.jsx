@@ -3,36 +3,50 @@
 // PURPOSE:    Chronological activity feed. Date-grouped event list.
 // ============================================================
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
 import Sidebar from "./Sidebar";
-
-const EVENTS = [
-  { date: "Today",        time: "2:15 PM",  type: "reminder", text: "Created reminder: Call Muzammal about API bug" },
-  { date: "Today",        time: "11:30 AM", type: "memory",   text: "Stored 3 new memories from Backend Architecture Sync" },
-  { date: "Today",        time: "10:00 AM", type: "meeting",  text: "Recorded: Backend Architecture Sync (32m)" },
-  { date: "Yesterday",    time: "5:45 PM",  type: "task",     text: "Completed task: Update Whisper to small model" },
-  { date: "Yesterday",    time: "4:00 PM",  type: "meeting",  text: "Recorded: Frontend Design Review (45m)" },
-  { date: "Yesterday",    time: "2:10 PM",  type: "memory",   text: "Pinned memory: Use ChromaDB for vector storage" },
-  { date: "Yesterday",    time: "9:30 AM",  type: "reminder", text: "Reminder triggered: Submit weekly progress report" },
-  { date: "Mon, Jun 23",  time: "3:25 PM",  type: "meeting",  text: "Recorded: Supervisor FYP Check-in (20m)" },
-  { date: "Mon, Jun 23",  time: "11:00 AM", type: "decision", text: "Decision: Switch to Groq Llama 3.3 for summarization" },
-  { date: "Sun, Jun 22",  time: "8:30 PM",  type: "task",     text: "Created task: Fix authentication bug" },
-  { date: "Sun, Jun 22",  time: "2:45 PM",  type: "meeting",  text: "Recorded: Database Schema Planning (28m)" },
-];
+import { getTimeline } from "./data_api";
 
 const TYPE_CONFIG = {
-  meeting:  { label: "Meeting",  color: COLORS.emerald, icon: "🎙" },
-  reminder: { label: "Reminder", color: COLORS.violet,  icon: "⏰" },
-  memory:   { label: "Memory",   color: COLORS.cyan,    icon: "💾" },
-  task:     { label: "Task",     color: COLORS.amber,   icon: "✓" },
-  decision: { label: "Decision", color: COLORS.red,     icon: "★" },
+  meeting:  { label: "Meeting",  color: COLORS.emerald, icon: "\u{1F399}" },
+  reminder: { label: "Reminder", color: COLORS.violet,  icon: "\u23F0" },
 };
 
-export default function Timeline({ navigate }) {
-  const [filter, setFilter] = useState("all");
+// Group by calendar day so the feed reads as "Today / Yesterday / 14 Jun".
+function dayLabel(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Unknown";
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+  const diff = Math.round((day(new Date()) - day(d)) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  if (diff > 1 && diff < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
 
-  const filtered = filter === "all" ? EVENTS : EVENTS.filter(e => e.type === filter);
+export default function Timeline({ navigate, user }) {
+  const [filter, setFilter]   = useState("all");
+  const [events, setEvents]   = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    getTimeline()
+      .then((r) => alive && setEvents(
+        (r.events || []).map((e) => ({
+          ...e,
+          date: dayLabel(e.at),
+          time: new Date(e.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
+          text: e.type === "meeting" ? `Recorded: ${e.title} (${e.detail})` : `Reminder: ${e.title}`,
+        }))
+      ))
+      .catch(() => {})
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, []);
+
+  const filtered = filter === "all" ? events : events.filter(e => e.type === filter);
   const grouped = filtered.reduce((acc, e) => {
     if (!acc[e.date]) acc[e.date] = [];
     acc[e.date].push(e);
@@ -43,7 +57,7 @@ export default function Timeline({ navigate }) {
     <>
       <style>{GLOBAL_CSS}</style>
       <div style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="timeline" navigate={navigate}/>
+        <Sidebar active="timeline" navigate={navigate} user={user}/>
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <header style={{
@@ -56,7 +70,7 @@ export default function Timeline({ navigate }) {
               fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
               marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em",
             }}>
-              {filtered.length} events
+              {loading ? "Loading\u2026" : `${filtered.length} events`}
             </div>
           </header>
 
@@ -98,6 +112,17 @@ export default function Timeline({ navigate }) {
           {/* Timeline list */}
           <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px 40px" }}>
             <div style={{ maxWidth: 760, margin: "0 auto" }}>
+              {!loading && filtered.length === 0 && (
+                <div style={{ textAlign: "center", padding: "56px 20px" }}>
+                  <div style={{ fontFamily: FONTS.heading, fontSize: 24, marginBottom: 8, color: COLORS.textPrimary }}>
+                    Nothing here yet
+                  </div>
+                  <div style={{ fontSize: 14, color: COLORS.textSecondary }}>
+                    Your meetings and reminders will show up on this timeline.
+                  </div>
+                </div>
+              )}
+
               {Object.entries(grouped).map(([date, events]) => (
                 <div key={date} style={{ marginBottom: 28 }}>
                   {/* Date header */}

@@ -75,12 +75,31 @@ def draft_email(to: str, subject: str, body: str, cc: str = "") -> dict:
     }
 
 
-def send_email_draft(draft_id: str) -> dict:
+def latest_pending_draft_id() -> str | None:
+    """Most recently created draft still awaiting confirmation."""
+    drafts = _load_drafts()
+    pending = [d for d in drafts.values() if d.get("status") == "pending"]
+    if not pending:
+        return None
+    pending.sort(key=lambda d: d.get("created_at", ""), reverse=True)
+    return pending[0]["id"]
+
+
+def send_email_draft(draft_id: str = "") -> dict:
     """
-    Actually send a previously drafted email. Called by the frontend
-    AFTER the user clicks 'Send' on the preview card.
+    Send a previously drafted email.
+
+    Called both by the Send button on the preview card and by the agent when
+    the user simply says "send it" — in that case no id arrives, so we fall
+    back to the newest pending draft.
     """
     drafts = _load_drafts()
+
+    if not draft_id:
+        draft_id = latest_pending_draft_id()
+        if not draft_id:
+            return {"success": False, "error": "There is no draft waiting to be sent."}
+
     draft = drafts.get(draft_id)
 
     if not draft:
@@ -125,7 +144,11 @@ def send_email_draft(draft_id: str) -> dict:
         return {"success": False, "error": f"Failed to send: {e}"}
 
 
-def cancel_email_draft(draft_id: str) -> dict:
+def cancel_email_draft(draft_id: str = "") -> dict:
+    if not draft_id:
+        draft_id = latest_pending_draft_id()
+        if not draft_id:
+            return {"success": False, "error": "There is no draft to cancel."}
     """Mark a draft as cancelled (won't be sent)."""
     drafts = _load_drafts()
     draft = drafts.get(draft_id)
@@ -187,6 +210,42 @@ def search_emails(query: str, limit: int = 5) -> dict:
 # ── Tool schemas ──────────────────────────────────────────────────────────────
 
 EMAIL_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "send_email_draft",
+            "description": (
+                "Send an email draft that is waiting for confirmation. Use this when "
+                "the user confirms with something like 'send it', 'send as is', 'yes send', "
+                "or 'go ahead'. Omit draft_id to send the most recent pending draft."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "draft_id": {
+                        "type": "string",
+                        "description": "Draft to send. Leave empty for the most recent pending draft.",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cancel_email_draft",
+            "description": (
+                "Discard an email draft the user no longer wants to send. Omit draft_id "
+                "to cancel the most recent pending draft."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "draft_id": {"type": "string", "description": "Draft to cancel; empty for the latest."},
+                },
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -261,6 +320,8 @@ EMAIL_TOOLS = [
 
 EMAIL_FUNCTIONS = {
     "draft_email":        draft_email,
+    "send_email_draft":   send_email_draft,
+    "cancel_email_draft": cancel_email_draft,
     "read_recent_emails": read_recent_emails,
     "search_emails":      search_emails,
 }

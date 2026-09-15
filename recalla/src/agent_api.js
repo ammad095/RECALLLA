@@ -4,12 +4,12 @@
 //             email draft send/cancel.
 // ============================================================
 
-const API_HOST = import.meta.env.VITE_API_URL || "http://localhost:8001";
-const AGENT_BASE = `${API_HOST}/api/agent`;
+import { API_AGENT as AGENT_BASE } from "./config";
+import { authFetch } from "./auth_api";
 
 /** Send a message to the agent. */
 export async function agentChat(message, history = []) {
-  const res = await fetch(`${AGENT_BASE}/chat`, {
+  const res = await authFetch(`${AGENT_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, history }),
@@ -23,7 +23,7 @@ export async function agentChat(message, history = []) {
 
 /** Real AI summary from Groq. */
 export async function summarizeTranscript(transcript, includeKeyPoints = false) {
-  const res = await fetch(`${AGENT_BASE}/summarize`, {
+  const res = await authFetch(`${AGENT_BASE}/summarize`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transcript, include_key_points: includeKeyPoints }),
@@ -35,7 +35,7 @@ export async function summarizeTranscript(transcript, includeKeyPoints = false) 
 /** Status check — what's configured on backend. */
 export async function getAgentStatus() {
   try {
-    const res = await fetch(`${AGENT_BASE}/status`);
+    const res = await authFetch(`${AGENT_BASE}/status`);
     return res.ok ? await res.json() : { groq_configured: false, google_configured: false };
   } catch {
     return { groq_configured: false, google_configured: false };
@@ -44,13 +44,13 @@ export async function getAgentStatus() {
 
 // ── Reminders ─────────────────────────────────────────────────────────────
 export async function listReminders(status = "pending") {
-  const res = await fetch(`${AGENT_BASE}/reminders?status=${status}`);
+  const res = await authFetch(`${AGENT_BASE}/reminders?status=${status}`);
   if (!res.ok) throw new Error("Failed to fetch reminders");
   return res.json();
 }
 
 export async function createReminder({ title, datetime_iso, priority = "medium", category = "general", notes = "" }) {
-  const res = await fetch(`${AGENT_BASE}/reminders`, {
+  const res = await authFetch(`${AGENT_BASE}/reminders`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title, datetime_iso, priority, category, notes }),
@@ -60,13 +60,13 @@ export async function createReminder({ title, datetime_iso, priority = "medium",
 }
 
 export async function completeReminder(reminderId) {
-  const res = await fetch(`${AGENT_BASE}/reminders/${reminderId}/complete`, { method: "PATCH" });
+  const res = await authFetch(`${AGENT_BASE}/reminders/${reminderId}/complete`, { method: "PATCH" });
   if (!res.ok) throw new Error("Failed to complete reminder");
   return res.json();
 }
 
 export async function deleteReminder(reminderId) {
-  const res = await fetch(`${AGENT_BASE}/reminders/${reminderId}`, { method: "DELETE" });
+  const res = await authFetch(`${AGENT_BASE}/reminders/${reminderId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete reminder");
   return res.json();
 }
@@ -74,7 +74,7 @@ export async function deleteReminder(reminderId) {
 // ── Email drafts ──────────────────────────────────────────────────────────
 /** User confirmed — actually send the drafted email. */
 export async function sendEmailDraft(draftId) {
-  const res = await fetch(`${AGENT_BASE}/send-draft/${draftId}`, { method: "POST" });
+  const res = await authFetch(`${AGENT_BASE}/send-draft/${draftId}`, { method: "POST" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Send failed" }));
     throw new Error(err.detail || "Send failed");
@@ -84,7 +84,7 @@ export async function sendEmailDraft(draftId) {
 
 /** User cancelled — mark draft as cancelled. */
 export async function cancelEmailDraft(draftId) {
-  const res = await fetch(`${AGENT_BASE}/draft/${draftId}`, { method: "DELETE" });
+  const res = await authFetch(`${AGENT_BASE}/draft/${draftId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Cancel failed");
   return res.json();
 }

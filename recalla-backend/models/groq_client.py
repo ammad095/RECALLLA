@@ -10,9 +10,16 @@ load_dotenv()
 
 _client = None
 
-# Default model — Llama 3.3 70B is fast, free tier friendly, and excellent quality
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
-FAST_MODEL = "llama-3.1-8b-instant"  # For lightweight tasks
+# Model IDs move around on Groq — the Llama 3.x ids this project originally used
+# now return 404 for this account. Verified working as of the last check:
+#   openai/gpt-oss-120b   larger, better reasoning, supports tool calling
+#   openai/gpt-oss-20b    faster, also supports tool calling
+#
+# Override without editing code by setting GROQ_MODEL / GROQ_FAST_MODEL in .env.
+# If both start failing with model_not_found, run scripts/check_models.py to see
+# what the key can actually reach.
+DEFAULT_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+FAST_MODEL    = os.getenv("GROQ_FAST_MODEL", "openai/gpt-oss-20b")
 
 
 def get_groq_client():
