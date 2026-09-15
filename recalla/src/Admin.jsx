@@ -4,39 +4,53 @@
 //             Uses red as accent to distinguish from main app emerald..
 // ============================================================
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
 import Sidebar from "./Sidebar";
-
-const USERS = [
-  { id: 1, name: "Ammad Ahmad",         email: "ammad@riphah.edu.pk",      role: "admin",  status: "active",  joined: "Jan 2026",   meetings: 24 },
-  { id: 2, name: "Muhammad Muzammal",   email: "muzammal@riphah.edu.pk",   role: "user",   status: "active",  joined: "Jan 2026",   meetings: 18 },
-  { id: 3, name: "Dr. Muhammad Adnan",  email: "adnan@riphah.edu.pk",      role: "viewer", status: "active",  joined: "Feb 2026",   meetings: 5  },
-  { id: 4, name: "Test User",           email: "test@recalla.app",         role: "user",   status: "inactive", joined: "Mar 2026", meetings: 0  },
-];
-
-const ACTIVITY = [
-  { time: "2 min ago",  user: "Ammad",    action: "Created reminder via agent" },
-  { time: "12 min ago", user: "Ammad",    action: "Recorded meeting (32m)" },
-  { time: "1h ago",     user: "Muzammal", action: "Generated AI summary" },
-  { time: "3h ago",     user: "Dr. Adnan", action: "Viewed meeting transcript" },
-  { time: "5h ago",     user: "Ammad",    action: "Signed in" },
-];
+import { adminListUsers, adminUpdateUser } from "./data_api";
+import { fmtWhen } from "./format";
 
 const ROLE_COLOR = {
-  admin:  COLORS.red,
-  user:   COLORS.emerald,
-  viewer: COLORS.cyan,
+  admin: COLORS.red,
+  user:  COLORS.emerald,
 };
 
-export default function Admin({ navigate }) {
+export default function Admin({ navigate, user }) {
+  const [users, setUsers]     = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await adminListUsers();
+        if (alive) { setUsers(r.users || []); setError(null); }
+      } catch (e) {
+        if (alive) setError(e.message);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const toggleActive = async (u) => {
+    try {
+      await adminUpdateUser(u.id, { is_active: !u.is_active });
+      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, is_active: !x.is_active } : x)));
+    } catch (e) { setError(e.message); }
+  };
+
+  const totalMeetings = users.reduce((a, u) => a + (u.meetings || 0), 0);
+  const activeUsers   = users.filter((u) => u.is_active).length;
   const [tab, setTab] = useState("users");
 
   return (
     <>
       <style>{GLOBAL_CSS}</style>
       <div style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="settings" navigate={navigate}/>
+        <Sidebar active="settings" navigate={navigate} user={user}/>
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <header style={{
@@ -78,10 +92,10 @@ export default function Admin({ navigate }) {
             maxWidth: 880, width: "100%", margin: "0 auto",
           }}>
             {[
-              { label: "Total Users",      value: USERS.length, color: COLORS.red },
-              { label: "Active Today",     value: 3,             color: COLORS.emerald },
-              { label: "Meetings Stored",  value: 47,            color: COLORS.violet },
-              { label: "Storage Used",     value: "2.3 GB",      color: COLORS.cyan },
+              { label: "Total Users",      value: loading ? "\u2014" : users.length,   color: COLORS.red },
+              { label: "Active Accounts",  value: loading ? "\u2014" : activeUsers,    color: COLORS.emerald },
+              { label: "Meetings Stored",  value: loading ? "\u2014" : totalMeetings,  color: COLORS.violet },
+              { label: "Admins",           value: loading ? "\u2014" : users.filter(u => u.role === "admin").length, color: COLORS.cyan },
             ].map((s, i) => (
               <div key={i} className="corners" style={{
                 background: COLORS.surface, border: `1px solid ${COLORS.border}`,
@@ -138,7 +152,15 @@ export default function Admin({ navigate }) {
               {/* USERS */}
               {tab === "users" && (
                 <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {USERS.map(u => (
+                  {error && (
+                    <div style={{
+                      padding: "12px 16px", borderRadius: 10, background: COLORS.surface,
+                      border: `1px solid ${COLORS.red}`, color: COLORS.red,
+                      fontFamily: FONTS.mono, fontSize: 11,
+                    }}>{error}</div>
+                  )}
+                  {loading && [0,1].map(i => <div key={i} className="skeleton" style={{ height: 66, borderRadius: 14 }}/>)}
+                  {users.map(u => (
                     <div key={u.id} className="corners" style={{
                       background: COLORS.surface, border: `1px solid ${COLORS.border}`,
                       padding: "14px 18px",
@@ -148,7 +170,7 @@ export default function Admin({ navigate }) {
                         width: 36, height: 36,
                         background: `linear-gradient(135deg, ${ROLE_COLOR[u.role]}, ${COLORS.violet})`,
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontFamily: FONTS.heading, fontSize: 14, color: COLORS.bg,
+                        fontFamily: FONTS.heading, fontSize: 14, color: COLORS.onAccent,
                         flexShrink: 0,
                       }}>
                         {u.name.split(" ").map(n => n[0]).slice(0,2).join("")}
@@ -172,16 +194,32 @@ export default function Admin({ navigate }) {
                         }}>
                           {u.role}
                         </span>
-                        <span className="status-dot" style={{
-                          background: u.status === "active" ? COLORS.emerald : COLORS.textTertiary,
-                        }}/>
+                        <button
+                          onClick={() => toggleActive(u)}
+                          title={u.is_active ? "Deactivate account" : "Reactivate account"}
+                          style={{
+                            background: "none", border: "none", cursor: "pointer",
+                            display: "flex", alignItems: "center", gap: 6, padding: "2px 4px",
+                            fontFamily: FONTS.mono, fontSize: 10, letterSpacing: "0.08em",
+                            textTransform: "uppercase",
+                            color: u.is_active ? COLORS.emerald : COLORS.textTertiary,
+                          }}
+                        >
+                          <span className="status-dot" style={{
+                            background: u.is_active ? COLORS.emerald : COLORS.textTertiary,
+                          }}/>
+                          {u.is_active ? "Active" : "Disabled"}
+                        </button>
                       </div>
 
                       <div style={{
                         fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
                         textTransform: "uppercase", letterSpacing: "0.08em", minWidth: 90, textAlign: "right",
                       }}>
-                        {u.meetings} meetings
+                        {u.meetings} meeting{u.meetings !== 1 ? "s" : ""}
+                        <div style={{ fontSize: 9, color: COLORS.textTertiary, marginTop: 3, textTransform: "none", letterSpacing: 0 }}>
+                          {u.last_login_at ? `Last seen ${fmtWhen(u.last_login_at)}` : "Never signed in"}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -191,7 +229,10 @@ export default function Admin({ navigate }) {
               {/* ACTIVITY */}
               {tab === "activity" && (
                 <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {ACTIVITY.map((a, i) => (
+                  {users.filter(u => u.last_login_at)
+                        .sort((a,b) => new Date(b.last_login_at) - new Date(a.last_login_at))
+                        .map(u => ({ time: fmtWhen(u.last_login_at), user: u.name, action: "Signed in" }))
+                        .map((a, i) => (
                     <div key={i} style={{
                       background: COLORS.surface, border: `1px solid ${COLORS.border}`,
                       padding: "10px 16px",

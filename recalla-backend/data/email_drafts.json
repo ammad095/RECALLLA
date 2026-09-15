@@ -55,5 +55,100 @@
     "body": "Hi Muzammal, I wanted to reach out to you about the API bug that weve been experiencing. Can we schedule a time to discuss this further",
     "status": "pending",
     "created_at": "2026-06-24T10:18:30.594311"
+  },
+  "d0f3ae06-e2b": {
+    "id": "d0f3ae06-e2b",
+    "to": "ammad@test.com",
+    "cc": "",
+    "subject": "Hello",
+    "body": "Hello",
+    "status": "pending",
+    "created_at": "2026-08-08T15:00:34.026200"
+  },
+  "8511d756-52d": {
+    "id": "8511d756-52d",
+    "to": "starmurshad123@gmail.com",
+    "cc": "",
+    "subject": "Greetings",
+    "body": "Hello,\n\nI hope you are doing well.\n\nBest regards,\nAmmad",
+    "status": "pending",
+    "created_at": "2026-08-17T16:01:33.023102"
+  },
+  "94f718a2-218": {
+    "id": "94f718a2-218",
+    "to": "starmurshad123@gmail.com",
+    "cc": "",
+    "subject": "Greetings",
+    "body": "Hello,\n\nI hope you are doing well. Just wanted to send a warm greeting your way.\n\nBest regards,\nAmmad",
+    "status": "pending",
+    "created_at": "2026-08-17T16:04:40.459633"
+  },
+  "64134778-bff": {
+    "id": "64134778-bff",
+    "to": "starmurshad123@gmail.com",
+    "cc": "",
+    "subject": "Greetings",
+    "body": "Hello,\n\nI hope you are doing well. Just wanted to send a quick greeting and wish you a wonderful day.\n\nBest regards,\nAmmad",
+    "status": "pending",
+    "created_at": "2026-08-17T16:14:08.037201"
+  },
+  "66a6b269-b75": {
+    "id": "66a6b269-b75",
+    "to": "test@example.com",
+    "cc": "",
+    "subject": "Warm Greetings",
+    "body": "Hello,\n\nI hope this message finds you well. I wanted to reach out and extend my warm greetings. Please let me know if there's anything I can assist you with.\n\nBest regards,\nAmmad",
+    "status": "pending",
+    "created_at": "2026-08-17T16:35:13.671352"
+  },
+  "99bd8911-04b": {
+    "id": "99bd8911-04b",
+    "to": "starmurshad123@gmail.com",
+    "cc": "",
+    "subject": "Hi",
+    "body": "Hi,\n\nMuzammal is there.\n\nAmmad",
+    "status": "pending",
+    "created_at": "2026-08-27T15:20:00.678489"
+  },
+  "0149213b-220": {
+    "id": "0149213b-220",
+    "to": "startmurshad123@gmail.com",
+    "cc": "",
+    "subject": "Hello",
+    "body": "Hi Muzammal,\n\nIs there?\n\nBest regards,\nAmmad",
+    "status": "pending",
+    "created_at": "2026-08-27T15:21:40.772977"
+  },
+  "da446907-4b1": {
+    "id": "da446907-4b1",
+    "to": "starmurshad123@gmail.com",
+    "cc": "",
+    "subject": "Hello",
+    "body": "Hi Muzammal,\n\nIs there?\n\nBest regards,\nAmmad",
+    "status": "cancelled",
+    "created_at": "2026-08-27T15:22:53.070202",
+    "cancelled_at": "2026-08-27T15:24:39.780869"
+  },
+  "9bb55d45-d69": {
+    "id": "9bb55d45-d69",
+    "to": "muzammalkhalid139@gmail.com",
+    "cc": "",
+    "subject": "Recalla test",
+    "body": "Sending works. — Recalla",
+    "status": "sent",
+    "created_at": "2026-08-27T15:47:48.694202",
+    "sent_at": "2026-08-27T15:47:50.527228",
+    "gmail_id": "1a042d54d048b009"
+  },
+  "948e6bbf-42d": {
+    "id": "948e6bbf-42d",
+    "to": "starmurshad123@gmail.com",
+    "cc": "",
+    "subject": "Hello",
+    "body": "Hello, app is working now.\n\nRegards,\nAmmad",
+    "status": "sent",
+    "created_at": "2026-08-28T14:22:20.137750",
+    "sent_at": "2026-08-28T14:22:36.006852",
+    "gmail_id": "1a047ad9e9d1d040"
   }
 }

@@ -4,37 +4,42 @@
 //             Simple filter chips + list. No stat cards.
 // ============================================================
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
 import Sidebar from "./Sidebar";
-
-const MEMORIES = [
-  { id: 1, type: "decision", content: "Use ChromaDB for vector storage instead of Pinecone — free, local, no infra costs.", date: "Yesterday", meeting: "Backend Architecture Sync", pinned: true },
-  { id: 2, type: "task",     content: "Muzammal will deploy Whisper v3 to staging by Friday for real-audio testing.", date: "Yesterday", meeting: "Backend Architecture Sync" },
-  { id: 3, type: "deadline", content: "FYP final demo scheduled for June 30 — supervisor expects working build.", date: "Mon",       meeting: "Supervisor FYP Check-in", pinned: true },
-  { id: 4, type: "insight",  content: "Speaker diarization works well with 2-3 speakers but degrades with 4+ — limit recommendation.", date: "Mon", meeting: "Frontend Design Review" },
-  { id: 5, type: "task",     content: "Fix authentication bug before next week's product sprint.", date: "Last Tue", meeting: "Product Sprint Planning" },
-  { id: 6, type: "decision", content: "Switch summarization model from local T5 to Groq Llama 3.3 70B for better quality and free tier.", date: "Jun 14", meeting: "AI Model Selection" },
-  { id: 7, type: "fact",     content: "Whisper small model handles Urdu transcription with ~80% accuracy on test set.", date: "Jun 12", meeting: "Multilingual Testing" },
-];
+import { getMemory } from "./data_api";
+import { fmtWhen } from "./format";
 
 const TYPE_CONFIG = {
   all:      { label: "All",       color: COLORS.textSecondary },
   decision: { label: "Decisions", color: COLORS.emerald },
   task:     { label: "Tasks",     color: COLORS.violet },
   deadline: { label: "Deadlines", color: COLORS.red },
-  insight:  { label: "Insights",  color: COLORS.cyan },
-  fact:     { label: "Facts",     color: COLORS.amber },
+  question: { label: "Questions", color: COLORS.cyan },
 };
 
-export default function Memory({ navigate }) {
-  const [search, setSearch]     = useState("");
-  const [filter, setFilter]     = useState("all");
-  const [pinnedOnly, setPinned] = useState(false);
+export default function Memory({ navigate, user }) {
+  const [search, setSearch]   = useState("");
+  const [filter, setFilter]   = useState("all");
+  const [items, setItems]     = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = MEMORIES.filter(m => {
+  useEffect(() => {
+    let alive = true;
+    getMemory()
+      .then((r) => alive && setItems(
+        (r.items || []).map((m) => ({
+          id: m.id, type: m.kind, content: m.text,
+          date: fmtWhen(m.at), meeting: m.meeting_title, meetingId: m.meeting_id,
+        }))
+      ))
+      .catch(() => {})
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, []);
+
+  const filtered = items.filter(m => {
     if (filter !== "all" && m.type !== filter) return false;
-    if (pinnedOnly && !m.pinned) return false;
     if (search && !m.content.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -43,7 +48,7 @@ export default function Memory({ navigate }) {
     <>
       <style>{GLOBAL_CSS}</style>
       <div style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="memory" navigate={navigate}/>
+        <Sidebar active="memory" navigate={navigate} user={user}/>
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <header style={{
@@ -56,7 +61,7 @@ export default function Memory({ navigate }) {
               fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
               marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em",
             }}>
-              {filtered.length} of {MEMORIES.length} stored
+              {loading ? "Loading\u2026" : `${filtered.length} of ${items.length} stored`}
             </div>
           </header>
 
@@ -101,20 +106,6 @@ export default function Memory({ navigate }) {
                     {cfg.label}
                   </button>
                 ))}
-                <button
-                  onClick={() => setPinned(!pinnedOnly)}
-                  style={{
-                    background: pinnedOnly ? `${COLORS.amber}1A` : "transparent",
-                    border: `1px solid ${pinnedOnly ? COLORS.amber : COLORS.border}`,
-                    color: pinnedOnly ? COLORS.amber : COLORS.textSecondary,
-                    padding: "5px 12px", fontFamily: FONTS.mono, fontSize: 10,
-                    textTransform: "uppercase", letterSpacing: "0.1em",
-                    cursor: "pointer", borderRadius: 999,
-                    marginLeft: "auto",
-                  }}
-                >
-                  ★ Pinned Only
-                </button>
               </div>
             </div>
           </div>
@@ -135,7 +126,7 @@ export default function Memory({ navigate }) {
                 return (
                   <div key={m.id} className="corners" style={{
                     background: COLORS.surface,
-                    border: `1px solid ${m.pinned ? "rgba(251,191,36,0.3)" : COLORS.border}`,
+                    border: `1px solid ${COLORS.border}`,
                     padding: "14px 18px",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
@@ -146,9 +137,6 @@ export default function Memory({ navigate }) {
                       }}>
                         {cfg.label}
                       </span>
-                      {m.pinned && (
-                        <span style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.amber }}>★</span>
-                      )}
                       <span style={{ marginLeft: "auto", fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textTertiary }}>
                         {m.date}
                       </span>

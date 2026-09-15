@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
+import { login as apiLogin, register as apiRegister } from "./auth_api";
 
 export default function Auth({ navigate, mode: initialMode = "login" }) {
   const [mode, setMode]         = useState(initialMode); // "login" | "register"
@@ -30,7 +31,7 @@ export default function Auth({ navigate, mode: initialMode = "login" }) {
   const strengthLabel = ["", "Weak", "Fair", "Good", "Strong"][strength];
   const strengthColor = [COLORS.textTertiary, COLORS.red, COLORS.amber, COLORS.cyan, COLORS.emerald][strength];
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -40,10 +41,22 @@ export default function Auth({ navigate, mode: initialMode = "login" }) {
     if (isRegister && strength < 2) return setError("Password too weak");
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      if (isRegister) {
+        await apiRegister(name.trim(), email.trim(), password);
+      } else {
+        await apiLogin(email.trim(), password);
+      }
       navigate("dashboard");
-    }, 800);
+    } catch (err) {
+      setError(
+        err.message === "Failed to fetch"
+          ? "Cannot reach the server — is the backend running?"
+          : err.message
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -1,34 +1,60 @@
 """
-Local reminder management — stored in a simple JSON file.
-No external API needed. Used by the agent as a tool.
+Reminder tools — backed by the reminders table, scoped to the acting user.
+
+These used to write to data/reminders.json. That file had no user_id column,
+so every account's reminders landed in one shared list, and the dashboard —
+which reads the database — never saw anything the agent created. Asking for a
+reminder in Ask Recalla or over WhatsApp appeared to work and then vanished.
+
+Everything now goes through the same table the rest of the app uses, keyed on
+the user the agent is acting for.
 """
 
-import json
-import os
-import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import select
 
-REMINDERS_FILE = os.path.join("data", "reminders.json")
-os.makedirs("data", exist_ok=True)
+from auth.context import get_current_user_id
+from db.session import SessionLocal
+from db.models import Reminder
 
 
-def _load_reminders() -> list:
-    """Load reminders from disk."""
-    if not os.path.exists(REMINDERS_FILE):
-        return []
+class NoActingUser(Exception):
+    """Raised when a reminder tool runs with nobody to attribute it to."""
+
+
+def _uid() -> str:
+    uid = get_current_user_id()
+    if not uid:
+        # Better to fail loudly than to write a reminder nobody owns — that is
+        # exactly how the old JSON file ended up unattributable.
+        raise NoActingUser("No signed-in user for this request.")
+    return uid
+
+
+def _parse_dt(value: str) -> Optional[datetime]:
+    """Accept ISO strings with or without a timezone; store as UTC."""
+    if not value:
+        return None
     try:
-        with open(REMINDERS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def _save_reminders(reminders: list):
-    """Save reminders to disk."""
-    with open(REMINDERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(reminders, f, indent=2, ensure_ascii=False)
+def _as_dict(r: Reminder) -> dict:
+    return {
+        "id": r.id,
+        "title": r.title,
+        "datetime": r.due_at.isoformat() if r.due_at else None,
+        "priority": r.priority,
+        "category": r.category,
+        "notes": r.notes or "",
+        "status": "completed" if r.completed else "pending",
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }
 
 
 # ── Tool functions ────────────────────────────────────────────────────────────
@@ -36,97 +62,89 @@ def _save_reminders(reminders: list):
 
 def create_reminder(title: str, datetime_iso: str, priority: str = "medium",
                     category: str = "general", notes: str = "") -> dict:
-    """
-    Create a new reminder.
-
-    Args:
-        title: What the reminder is about
-        datetime_iso: When to remind (ISO format, e.g. "2026-06-23T15:00:00")
-        priority: low | medium | high
-        category: general | meeting | task | personal
-        notes: Optional extra notes
-
-    Returns:
-        Dict with success status and the created reminder
-    """
-    reminders = _load_reminders()
-
-    reminder = {
-        "id":         str(uuid.uuid4())[:8],
-        "title":      title,
-        "datetime":   datetime_iso,
-        "priority":   priority if priority in ("low", "medium", "high") else "medium",
-        "category":   category,
-        "notes":      notes,
-        "completed":  False,
-        "created_at": datetime.now().isoformat(),
-    }
-
-    reminders.append(reminder)
-    _save_reminders(reminders)
-
-    return {
-        "success":  True,
-        "reminder": reminder,
-        "message":  f"Reminder created: '{title}' at {datetime_iso}",
-    }
+    """Create a reminder for the signed-in user."""
+    due = _parse_dt(datetime_iso)
+    db = SessionLocal()
+    try:
+        r = Reminder(
+            user_id=_uid(), title=title.strip(), due_at=due,
+            priority=priority or "medium", category=category or "general",
+            notes=notes or None,
+        )
+        db.add(r)
+        db.commit()
+        db.refresh(r)
+        return {
+            "success": True,
+            "type": "reminder_created",
+            "reminder": _as_dict(r),
+            "message": f"Reminder set: {r.title}",
+        }
+    except NoActingUser as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
 
 
 def list_reminders(filter_status: str = "pending", limit: int = 20) -> dict:
-    """
-    List reminders.
+    """List the signed-in user's reminders, soonest first."""
+    db = SessionLocal()
+    try:
+        q = select(Reminder).where(Reminder.user_id == _uid())
+        if filter_status == "pending":
+            q = q.where(Reminder.completed.is_(False))
+        elif filter_status == "completed":
+            q = q.where(Reminder.completed.is_(True))
+        rows = db.scalars(
+            q.order_by(Reminder.due_at.asc().nullslast()).limit(max(1, min(limit, 100)))
+        ).all()
+        return {"success": True, "count": len(rows),
+                "reminders": [_as_dict(r) for r in rows]}
+    except NoActingUser as e:
+        return {"success": False, "error": str(e), "reminders": []}
+    finally:
+        db.close()
 
-    Args:
-        filter_status: pending | completed | all
-        limit: Max number to return
 
-    Returns:
-        Dict with reminders list
-    """
-    reminders = _load_reminders()
-
-    if filter_status == "pending":
-        reminders = [r for r in reminders if not r.get("completed", False)]
-    elif filter_status == "completed":
-        reminders = [r for r in reminders if r.get("completed", False)]
-
-    # Sort by datetime ascending
-    reminders.sort(key=lambda r: r.get("datetime", ""))
-
-    return {
-        "success":   True,
-        "count":     len(reminders),
-        "reminders": reminders[:limit],
-    }
+def _owned(db, reminder_id: str) -> Optional[Reminder]:
+    """A reminder belonging to the acting user, or None."""
+    return db.scalar(
+        select(Reminder).where(Reminder.id == reminder_id,
+                               Reminder.user_id == _uid())
+    )
 
 
 def complete_reminder(reminder_id: str) -> dict:
-    """Mark a reminder as completed."""
-    reminders = _load_reminders()
-
-    for r in reminders:
-        if r["id"] == reminder_id:
-            r["completed"] = True
-            r["completed_at"] = datetime.now().isoformat()
-            _save_reminders(reminders)
-            return {"success": True, "message": f"Reminder marked as completed: {r['title']}"}
-
-    return {"success": False, "message": f"Reminder {reminder_id} not found"}
+    db = SessionLocal()
+    try:
+        r = _owned(db, reminder_id)
+        if not r:
+            return {"success": False, "error": "Reminder not found."}
+        r.completed = True
+        r.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        return {"success": True, "message": f"Marked done: {r.title}"}
+    except NoActingUser as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
 
 
 def delete_reminder(reminder_id: str) -> dict:
-    """Delete a reminder."""
-    reminders = _load_reminders()
-    original_count = len(reminders)
-    reminders = [r for r in reminders if r["id"] != reminder_id]
+    db = SessionLocal()
+    try:
+        r = _owned(db, reminder_id)
+        if not r:
+            return {"success": False, "error": "Reminder not found."}
+        title = r.title
+        db.delete(r)
+        db.commit()
+        return {"success": True, "message": f"Deleted: {title}"}
+    except NoActingUser as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
 
-    if len(reminders) < original_count:
-        _save_reminders(reminders)
-        return {"success": True, "message": "Reminder deleted"}
-    return {"success": False, "message": f"Reminder {reminder_id} not found"}
-
-
-# ── Tool schemas — these tell the agent what tools are available ──────────────
 
 REMINDER_TOOLS = [
     {
