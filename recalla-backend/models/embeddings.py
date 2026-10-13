@@ -29,15 +29,33 @@ _lock = threading.Lock()
 
 
 def get_model():
-    """Load the embedding model once, on first use."""
+    """
+    Load the embedding model once, on first use.
+
+    Two backends, same weights. sentence-transformers is used when it is
+    installed (developer machines, which already carry torch for Whisper);
+    otherwise chromadb's bundled ONNX build of the identical
+    all-MiniLM-L6-v2 model runs on onnxruntime instead.
+
+    This matters because the deployed server has no torch — it would be
+    750 MB of dependency for one 80 MB model. The vectors are the same 384
+    dimensions either way, so an index written by one backend is readable
+    by the other and nothing needs re-embedding.
+    """
     global _model
     if _model is None:
         with _lock:
             if _model is None:
-                from sentence_transformers import SentenceTransformer
+                try:
+                    from sentence_transformers import SentenceTransformer
 
-                print(f"[Recalla] Loading embedding model {MODEL_NAME}…")
-                _model = SentenceTransformer(MODEL_NAME)
+                    print(f"[Recalla] Loading embedding model {MODEL_NAME} (torch)…")
+                    _model = SentenceTransformer(MODEL_NAME)
+                except ImportError:
+                    from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
+
+                    print(f"[Recalla] Loading embedding model {MODEL_NAME} (onnx)…")
+                    _model = ONNXMiniLM_L6_V2()
                 print("[Recalla] Embedding model ready")
     return _model
 
@@ -47,8 +65,14 @@ def embed(texts: Iterable[str]) -> List[List[float]]:
     items = [t for t in texts]
     if not items:
         return []
-    vecs = get_model().encode(items, batch_size=32, show_progress_bar=False)
-    return [v.tolist() for v in vecs]
+
+    model = get_model()
+    # SentenceTransformer exposes .encode(); the Chroma function is callable.
+    if hasattr(model, "encode"):
+        vecs = model.encode(items, batch_size=32, show_progress_bar=False)
+    else:
+        vecs = model(items)
+    return [v.tolist() if hasattr(v, "tolist") else list(v) for v in vecs]
 
 
 def embed_one(text: str) -> List[float]:

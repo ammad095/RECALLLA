@@ -130,6 +130,16 @@ def process_chunk(sid, file_path, is_first=False, offset=None):
             # Fallback only — assumes windows arrive back to back.
             window_start = max(0.0, s["chunk_count"] * STEP)
 
+        # A silent window is normal mid-meeting; skip it rather than letting
+        # Whisper fail on a zero-length tensor and kill the live session.
+        from models.transcription import check_audio, EmptyAudio
+
+        try:
+            check_audio(file_path)
+        except EmptyAudio:
+            s["busy"] = False
+            return {"segments": [], "skipped": "no audio in this window"}
+
         model = get_model(LIVE_MODEL)
         result = model.transcribe(
             file_path,
@@ -279,6 +289,14 @@ def _refine_worker(sid):
 
         model = get_model(REFINE_MODEL)
         s["refine"]["progress"] = 30
+
+        from models.transcription import check_audio, EmptyAudio
+
+        try:
+            check_audio(merged)
+        except EmptyAudio as e:
+            s["refine"] = {"status": "error", "progress": 0, "error": str(e)}
+            return
 
         result = model.transcribe(merged, verbose=False, fp16=False, task="transcribe")
         s["refine"]["progress"] = 80

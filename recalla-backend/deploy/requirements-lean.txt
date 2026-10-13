@@ -1,0 +1,37 @@
+# Recalla server dependencies — transcription removed.
+#
+# Whisper, torch, torchaudio, spacy, librosa, numba and sentence-transformers
+# are gone: speech-to-text now runs on the user's device and the server only
+# ever receives finished text. That drops roughly 2 GB of wheels and takes the
+# resident footprint from ~400 MB to under 100 MB, which is what makes a 1 GB
+# Always Free instance viable.
+#
+# Embeddings still work: chromadb bundles the same all-MiniLM-L6-v2 model
+# running on onnxruntime, so semantic search is unchanged without torch.
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+python-multipart
+
+SQLAlchemy
+psycopg[binary]
+alembic
+
+groq
+chromadb
+
+google-auth
+google-auth-oauthlib
+google-api-python-client
+
+PyJWT
+argon2-cffi
+requests
+APScheduler
+
+# Speaker diarization still runs server-side; these are its only needs and
+# together they are ~120 MB, which the instance can afford.
+scikit-learn
+numpy
+email-validator

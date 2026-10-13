@@ -9,6 +9,7 @@ from routes.data    import router as data_router
 from routes.connectors import router as connectors_router
 from routes.chats   import router as chats_router
 from routes.whatsapp import router as whatsapp_router
+from routes.telegram import router as telegram_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -60,6 +61,7 @@ app.include_router(meetings_router, prefix="/api/meetings", tags=["Meetings"])
 app.include_router(agent_router,    prefix="/api/agent",    tags=["Agent"])
 app.include_router(chats_router,    prefix="/api/chats",    tags=["Chats"])
 app.include_router(whatsapp_router, prefix="/api/whatsapp", tags=["WhatsApp"])
+app.include_router(telegram_router, prefix="/api/telegram", tags=["Telegram"])
 
 @app.get("/")
 def root():

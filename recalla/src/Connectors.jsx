@@ -26,6 +26,7 @@ const ICONS = {
   google:    "M",
   desktop:   "▣",
   whatsapp:  "W",
+  telegram:  "TG",
   phone:     "☏",
   slack:     "S",
   notion:    "N",
@@ -88,17 +89,19 @@ export default function Connectors({ navigate, user }) {
     }
   };
 
-  const [waCode, setWaCode] = useState(null);
+  // Link codes, keyed by connector. Both WhatsApp and Telegram prove identity
+  // the same way: a code minted from a signed-in session, sent from the app.
+  const [codes, setCodes] = useState({});
 
-  const linkWhatsApp = async () => {
-    setBusy("whatsapp");
+  const linkByCode = (id) => async () => {
+    setBusy(id);
     try {
-      const res = await authFetch(`${API_HOST}/api/whatsapp/link-code`, { method: "POST" });
+      const res = await authFetch(`${API_HOST}/api/${id}/link-code`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Could not create a code");
-      setWaCode(data.code);
+      setCodes((c) => ({ ...c, [id]: data }));
       // The code expires; stop showing a stale one.
-      setTimeout(() => setWaCode(null), (data.expires_in || 600) * 1000);
+      setTimeout(() => setCodes((c) => ({ ...c, [id]: null })), (data.expires_in || 600) * 1000);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -176,9 +179,10 @@ export default function Connectors({ navigate, user }) {
                   : cloud.map((c) => (
                       <Card key={c.id} c={c} busy={busy === c.id}
                             onConnect={c.id === "google" ? connectGoogle
-                                     : c.id === "whatsapp" ? linkWhatsApp : null}
+                                     : (c.id === "whatsapp" || c.id === "telegram")
+                                       ? linkByCode(c.id) : null}
                             onDisconnect={() => disconnect(c.id)}
-                            code={c.id === "whatsapp" ? waCode : null} />
+                            code={codes[c.id] || null} />
                     ))}
               </div>
 
@@ -283,7 +287,7 @@ function Card({ c, busy, onConnect, onDisconnect, remote, code }) {
         }}>{c.reason}</div>
       )}
 
-      {code && (
+      {code?.code && (
         <div style={{
           marginTop: 4, padding: "11px 13px", borderRadius: 10,
           background: COLORS.bg, border: `1px solid ${COLORS.emerald}`,
@@ -295,9 +299,9 @@ function Card({ c, busy, onConnect, onDisconnect, remote, code }) {
           <div style={{
             fontFamily: FONTS.mono, fontSize: 17, color: COLORS.emerald,
             letterSpacing: "0.06em",
-          }}>link {code}</div>
+          }}>{c.id === "telegram" ? `/link ${code.code}` : `link ${code.code}`}</div>
           <div style={{ fontSize: 11.5, color: COLORS.textTertiary, marginTop: 6, lineHeight: 1.5 }}>
-            Message it to the Recalla WhatsApp number. Expires in 10 minutes.
+            {code.instructions || "Send this from the app. Expires in 10 minutes."}
           </div>
         </div>
       )}
@@ -316,6 +320,7 @@ function Card({ c, busy, onConnect, onDisconnect, remote, code }) {
             {busy ? "Working…"
               : partial ? "Reconnect"
               : c.id === "whatsapp" ? "Link my number"
+              : c.id === "telegram" ? "Link Telegram"
               : "Connect"}
           </button>
         )}

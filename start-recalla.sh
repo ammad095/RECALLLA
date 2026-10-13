@@ -4,6 +4,8 @@
 #
 #   ./start-recalla.sh              backend + frontend only
 #   ./start-recalla.sh --tunnel     also start the public tunnel for WhatsApp
+#   ./start-recalla.sh --stop       stop everything this script started
+#   ./start-recalla.sh --status     report what is actually running
 #
 # The tunnel uses ngrok with a reserved static domain, so the callback URL in
 # Meta never has to be re-pasted. Set NGROK_DOMAIN in recalla-backend/.env.
@@ -23,6 +25,35 @@ wait_for() {   # port, label, seconds
   for _ in $(seq 1 "${3:-60}"); do up "$1" && { echo "  $2 ready"; return 0; }; sleep 1; done
   echo "  $2 DID NOT START — see $LOGS"; return 1
 }
+
+# Match on the process name, not the command line. `pgrep -f ngrok` also
+# matches the shell running this script, which reports a dead tunnel as alive
+# — and a silently dead tunnel means WhatsApp stops with no error anywhere.
+running() { pgrep -x "$1" >/dev/null 2>&1; }
+
+status() {
+  echo "Recalla status"
+  echo "───────────────────────────────"
+  up 5432 && echo "  postgres   up" || echo "  postgres   DOWN"
+  up 8001 && echo "  backend    up" || echo "  backend    DOWN"
+  up 5173 && echo "  frontend   up" || echo "  frontend   DOWN"
+  if running ngrok; then
+    echo "  tunnel     up   https://${DOMAIN:-$(grep -E '^NGROK_DOMAIN=' "$BACKEND/.env" 2>/dev/null | cut -d= -f2-)}"
+  else
+    echo "  tunnel     DOWN (WhatsApp will not receive anything)"
+  fi
+}
+
+if [ "${1:-}" = "--status" ]; then status; exit 0; fi
+
+if [ "${1:-}" = "--stop" ]; then
+  echo "Stopping Recalla"
+  pkill -x ngrok            >/dev/null 2>&1 && echo "  tunnel stopped"
+  pkill -f "uvicorn main:app" >/dev/null 2>&1 && echo "  backend stopped"
+  pkill -f "vite"           >/dev/null 2>&1 && echo "  frontend stopped"
+  echo "  postgres left running (docker stop recalla-db to stop it too)"
+  exit 0
+fi
 
 echo "Recalla"
 echo "───────────────────────────────"
@@ -71,7 +102,7 @@ if [ "${1:-}" = "--tunnel" ]; then
     echo "  which means re-pasting the callback URL into Meta."
     setsid nohup ngrok http 8001 --log stdout > "$LOGS/tunnel.log" 2>&1 < /dev/null &
   else
-    pkill -f "ngrok http" >/dev/null 2>&1
+    pkill -x ngrok >/dev/null 2>&1
     sleep 1
     setsid nohup ngrok http 8001 --domain="$DOMAIN" --log stdout \
       > "$LOGS/tunnel.log" 2>&1 < /dev/null &

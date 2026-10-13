@@ -26,6 +26,9 @@ export default function MeetingDetail({ navigate, meeting , user }) {
   const [tasks, setTasks]             = useState([]);
   const [decisions, setDecisions]     = useState([]);
   const [extracting, setExtracting]   = useState(false);
+  // A meeting shorter than a summary is shown in full instead. Say so, or the
+  // Summary and Transcript tabs look identical for no visible reason.
+  const [verbatim, setVerbatim]       = useState(false);
   // "Write a summary after each meeting" is a real setting; honour it for the
   // automatic pass. The Generate button always works regardless.
   const [autoSummary, setAutoSummary] = useState(true);
@@ -114,6 +117,7 @@ export default function MeetingDetail({ navigate, meeting , user }) {
       const res = await summarizeTranscript(M.fullText, true);
       setSummary(res.summary);
       setKeyPoints(res.key_points || []);
+      setVerbatim(Boolean(res.verbatim));
 
       // Store it, so reopening the meeting shows the summary instantly rather
       // than paying for the same generation again.
@@ -291,7 +295,9 @@ export default function MeetingDetail({ navigate, meeting , user }) {
                     display: "flex", alignItems: "center", gap: 6,
                   }}>
                     <span className="status-dot" style={{ background: generating ? COLORS.amber : COLORS.emerald, animationDuration: generating ? "0.6s" : "2s" }}/>
-                    {generating ? "Writing the summary…" : "Summary"}
+                    {generating ? "Writing the summary…"
+                      : verbatim ? "Short meeting — shown in full"
+                      : "Summary"}
                   </div>
 
                   <div className="corners" style={{

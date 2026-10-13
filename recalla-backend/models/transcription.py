@@ -2,8 +2,34 @@ import os
 import glob
 import shutil
 import sys
-import whisper
 import uuid
+
+# Speech-to-text is optional on the server.
+#
+# Transcription now runs on the user's device — the mobile app sends finished
+# text, so a deployed server never loads Whisper and should not carry torch
+# (roughly 2 GB of wheels, and more resident memory than a 1 GB instance has).
+# Developer machines still have it, so import it when present and degrade
+# cleanly when not, rather than making the whole API refuse to start.
+try:
+    import whisper
+    TRANSCRIPTION_AVAILABLE = True
+except ImportError:
+    whisper = None
+    TRANSCRIPTION_AVAILABLE = False
+
+
+class TranscriptionUnavailable(RuntimeError):
+    """Raised when audio is sent to a server that has no speech model."""
+
+
+def _require_whisper():
+    if not TRANSCRIPTION_AVAILABLE:
+        raise TranscriptionUnavailable(
+            "This server does not transcribe audio. Recording and "
+            "speech-to-text happen in the Recalla app on your device; the "
+            "server receives the finished transcript."
+        )
 
 # Use every core — this box is CPU-only, so threading is the whole ballgame.
 try:
@@ -79,6 +105,7 @@ def get_model(name: str = REFINE_MODEL):
     """Load (and cache) a Whisper model by name."""
     if name not in _models:
         print(f"[Recalla] Loading Whisper model ({name})...")
+        _require_whisper()
         _models[name] = whisper.load_model(name)
         print(f"[Recalla] Model '{name}' loaded.")
     return _models[name]
@@ -126,12 +153,66 @@ def transcribe_audio(file_path: str, job_id: str = None, hint_speakers: int = No
     model_name:    which Whisper model to use (see LIVE_MODEL / REFINE_MODEL)
     """
 
+
+
+class EmptyAudio(Exception):
+    """Raised when a file contains no usable audio to transcribe."""
+
+
+# Whisper needs roughly this much sound to produce anything. Below it, the
+# encoder is handed a zero-length tensor and torch fails with "cannot reshape
+# tensor of 0 elements into shape [1, 0, 12, -1]" — an error that says nothing
+# to a user whose microphone simply was not capturing.
+MIN_AUDIO_SECONDS = 0.35
+
+
+def check_audio(file_path: str) -> float:
+    """
+    Return the duration in seconds, or raise EmptyAudio.
+
+    Called before every transcribe(). A silent or zero-length recording is a
+    normal thing to happen — a denied microphone permission, a muted input,
+    a stop pressed too quickly — so it deserves a sentence the user can act
+    on rather than a tensor shape.
+    """
+    import os
+
+    if not file_path or not os.path.exists(file_path):
+        raise EmptyAudio("That recording could not be found on the server.")
+
+    if os.path.getsize(file_path) < 1024:
+        raise EmptyAudio(
+            "The recording is empty. Check that the microphone is not muted "
+            "and that the browser is allowed to use it, then try again."
+        )
+
+    try:
+        _require_whisper()
+        audio = whisper.load_audio(file_path)
+        seconds = len(audio) / 16000.0
+    except EmptyAudio:
+        raise
+    except Exception as e:
+        raise EmptyAudio(f"That audio could not be read ({type(e).__name__}).")
+
+    if seconds < MIN_AUDIO_SECONDS:
+        raise EmptyAudio(
+            "The recording contains no audio. Check that the right microphone "
+            "is selected and that it is not muted, then try again."
+        )
+    return seconds
+
     # Step 0 — Load Whisper
     if job_id:
         if not is_model_loaded(model_name):
             update_job(job_id, status="loading_model", step=0, progress=8)
         else:
             update_job(job_id, status="loading_model", step=0, progress=15)
+
+    _require_whisper()
+
+    # Fail with something readable before torch fails with a tensor shape.
+    check_audio(file_path)
 
     model = get_model(model_name)
 

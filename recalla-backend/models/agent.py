@@ -254,13 +254,16 @@ CRITICAL RULES:
    Never ask the user to repeat the recipient, subject or body at the confirm
    step: the draft already holds them. If you are unsure whether a draft exists,
    call send_email_draft anyway; it will tell you if there is nothing pending.
-5. Anything about the past belongs to search_memory. If the user asks what was
+5. "My tasks" and "action items" can mean two things, so check both: reminders
+   the user set themselves (list_reminders) AND commitments made in meetings
+   (search_memory). Answer with whatever you find in either.
+6. Anything about the past belongs to search_memory. If the user asks what was
    said, decided, agreed, promised or discussed — or refers to "the meeting",
    "last week", "we talked about" — search FIRST and answer from what comes
    back. Never say you have no record of something without searching for it.
    When you answer from memory, name the source: the meeting title and who
    said it. If the search returns nothing, say so plainly rather than guessing.
-6. Be concise and direct in your responses.
+7. Be concise and direct in your responses.
 """
 
     messages = [{"role": "system", "content": system_prompt}]

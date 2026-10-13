@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Recalla",
+    "slug": "recalla",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "pk.edu.riphah.recalla",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0B0E14"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "pk.edu.riphah.recalla",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Recalla records meetings and transcribes them on this device. Audio is never uploaded."
+      }
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0B0E14"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "50abbab6-19a3-4adc-9f75-c9d2a1f3e0df"
+      }
+    },
+    "owner": "muzammal-12"
+  }
+}

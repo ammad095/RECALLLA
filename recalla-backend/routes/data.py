@@ -255,7 +255,7 @@ def _reindex(meeting_id: str, extract: bool = True):
             ).all()
             transcript = ("\n".join(f"{x.speaker or 'Speaker'}: {x.text}" for x in segs)
                           if segs else (m.full_text or ""))
-            if len(transcript.strip()) < 60:
+            if len(transcript.strip()) < 25:
                 return
 
             result = extract_tasks_and_decisions(transcript)

@@ -116,8 +116,12 @@ export async function authFetch(url, options = {}, _retried = false) {
 
   const res = await fetch(url, { ...options, headers });
 
-  if (res.status === 401 && !_retried && getRefreshToken()) {
-    const fresh = await refreshAccessToken();
+  // Any unrecoverable 401 must end the session. Guarding this whole block on
+  // getRefreshToken() meant a missing or expired refresh token skipped the
+  // sign-out entirely, leaving the app sitting on a page firing 401s forever
+  // instead of returning the user to the login screen.
+  if (res.status === 401 && !_retried) {
+    const fresh = getRefreshToken() ? await refreshAccessToken() : null;
     if (fresh) return authFetch(url, options, true);
     notifySignedOut();
   }

@@ -1,0 +1,22 @@
+[Unit]
+Description=Recalla backend
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/recalla
+EnvironmentFile=/opt/recalla/.env
+ExecStart=/opt/recalla/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8001
+
+# Whisper and the embedding model take time to load on first request; don't
+# let systemd decide the service is hung while a model is being read in.
+TimeoutStartSec=300
+Restart=always
+RestartSec=5
+
+# The reminder scheduler is the reason this runs as a service rather than in
+# a terminal: it has to survive logout, reboots and the laptop being shut.
+[Install]
+WantedBy=multi-user.target

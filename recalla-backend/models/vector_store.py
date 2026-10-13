@@ -81,12 +81,20 @@ def add_chunks(records: List[dict]) -> int:
     return len(records)
 
 
-# Below this cosine similarity a "match" is noise. Measured against this
-# corpus: a genuine hit scores 0.3-0.55, while an unrelated question ("best
-# biryani recipe") still pulls back meeting text at 0.11-0.15. Without a floor
-# the agent is handed irrelevant context on every off-topic question and has
-# to be trusted to ignore it, which is exactly how confident nonsense starts.
-MIN_SIMILARITY = 0.22
+# Two filters, because one absolute number cannot do this job.
+#
+# A question carrying topic words ("what did we decide about the DATABASE")
+# scores 0.30-0.55 against the right chunk. The same question asked vaguely
+# ("what did we decide?") scores 0.12 against that identical chunk — it has
+# no content words to match on. Unrelated noise also sits around 0.10-0.15,
+# so a single cutoff either loses the vague question or lets the noise in.
+#
+# So: a low absolute floor removes only genuine garbage, and a relative one
+# keeps the tail from padding out the context. If the best hit is weak, the
+# agent is told plainly and decides — it is instructed to say when nothing
+# matches, and it is better at that judgement than a constant is.
+MIN_SIMILARITY = 0.08
+RELATIVE_CUTOFF = 0.45          # keep results within this fraction of the best
 
 
 def search(query: str, user_id: str, limit: int = 5,
@@ -116,11 +124,22 @@ def search(query: str, user_id: str, limit: int = 5,
     metas = (res.get("metadatas") or [[]])[0]
     dists = (res.get("distances") or [[]])[0]
 
-    out = []
+    scored = []
     for doc, meta, dist in zip(docs, metas, dists):
         # Chroma returns cosine distance; similarity reads better everywhere else.
         score = round(1.0 - float(dist), 3)
-        if score < min_similarity:
+        if score >= min_similarity:
+            scored.append((score, doc, meta))
+
+    if not scored:
+        return []
+
+    best = max(s for s, _, _ in scored)
+    floor = best * RELATIVE_CUTOFF
+
+    out = []
+    for score, doc, meta in scored:
+        if score < floor:
             continue
         out.append({
             "text": doc,

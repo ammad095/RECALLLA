@@ -1,6 +1,42 @@
-import spacy
+"""
+Entity and keyword extraction.
 
-nlp = spacy.load("en_core_web_sm")
+spaCy is optional. On a deployed server the structured extraction is done by
+the model in summarization.extract_tasks_and_decisions, which is both better
+at it and already paid for — spaCy's 120 MB and its language model are not
+worth carrying on a 1 GB instance for the entity pass alone.
+
+When spaCy is absent the keyword-based tagging still runs; only named-entity
+recognition (people, organisations, dates) is skipped.
+"""
+
+try:
+    import spacy
+    _nlp = spacy.load("en_core_web_sm")
+    SPACY_AVAILABLE = True
+except Exception:
+    spacy = None
+    _nlp = None
+    SPACY_AVAILABLE = False
+
+
+class _Blank:
+    """Minimal stand-in so the keyword passes work with no spaCy installed."""
+
+    def __init__(self, text):
+        self.text = text
+        self.ents = []
+
+    @property
+    def sents(self):
+        import re
+        for part in re.split(r"(?<=[.!?])\s+", self.text):
+            if part.strip():
+                yield type("S", (), {"text": part})()
+
+
+def nlp(text):
+    return _nlp(text) if _nlp is not None else _Blank(text)
 
 # Known tech terms to ignore as people/orgs
 TECH_TERMS = {

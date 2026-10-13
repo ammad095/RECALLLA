@@ -1,0 +1,22 @@
+# Replace with your hostname. A free DuckDNS subdomain works:
+#   https://duckdns.org  ->  recalla.duckdns.org  ->  your server's public IP
+#
+# Caddy obtains and renews a Let's Encrypt certificate automatically, which
+# is what makes Meta accept the webhook — a raw IP address cannot have one.
+
+recalla.duckdns.org {
+    encode zstd gzip
+
+    # Audio uploads are large; the default limit rejects a long meeting.
+    request_body {
+        max_size 200MB
+    }
+
+    reverse_proxy 127.0.0.1:8001 {
+        # Transcription of a long upload can run for minutes.
+        transport http {
+            read_timeout 600s
+            write_timeout 600s
+        }
+    }
+}

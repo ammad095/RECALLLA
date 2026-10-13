@@ -83,6 +83,15 @@ CONNECTORS = [
                     "Check your calendar"],
     },
     {
+        "id": "telegram",
+        "name": "Telegram",
+        "scope": "cloud",
+        "state": "available",
+        "blurb": "Message Recalla from Telegram — no limits, no approvals, anyone can use it.",
+        "actions": ["Ask anything by message", "Set reminders",
+                    "Search past meetings", "Get reminder notifications"],
+    },
+    {
         "id": "phone",
         "name": "Phone Calls",
         "scope": "cloud",
@@ -99,7 +108,11 @@ CONNECTORS = [
         "scope": "cloud",
         "state": "planned",
         "blurb": "Post messages and read channels.",
-        "reason": "Straightforward OAuth. Not built yet.",
+        "reason": (
+            "Needs a Slack app registered at api.slack.com with the chat:write and "
+            "channels:read scopes, then OAuth per user. Free, but it is a real "
+            "setup rather than a paste-a-token job."
+        ),
     },
     {
         "id": "notion",
@@ -107,7 +120,11 @@ CONNECTORS = [
         "scope": "cloud",
         "state": "planned",
         "blurb": "Save meeting notes into a database.",
-        "reason": "Straightforward OAuth. Not built yet.",
+        "reason": (
+            "Needs an internal integration at notion.so/my-integrations and the "
+            "target database shared with it. About two minutes, and no OAuth flow "
+            "is required for a single workspace."
+        ),
     },
     {
         "id": "linkedin",
@@ -189,6 +206,20 @@ def list_connectors(user: User = Depends(get_current_user), db: Session = Depend
                 "The app owner needs to create a Google Cloud OAuth client once. "
                 "After that, signing in here is a single click."
             )
+
+        if c["id"] == "telegram":
+            from routes.telegram import is_configured as tg_configured
+
+            if not tg_configured():
+                entry["state"] = "needs_setup"
+                entry["reason"] = (
+                    "The app owner needs a bot token from @BotFather once — about a "
+                    "minute, with no verification or review. After that, linking your "
+                    "account is a short code you send to the bot."
+                )
+            else:
+                entry["connected"] = bool(conn)
+                entry["account"] = conn.account_email or conn.account_name if conn else None
 
         if c["id"] == "whatsapp":
             from routes.whatsapp import is_configured as wa_configured

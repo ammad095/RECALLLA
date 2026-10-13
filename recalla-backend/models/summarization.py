@@ -19,6 +19,10 @@ Your summary must:
 Return ONLY the summary text, no preamble or headers."""
 
 
+# A transcript shorter than this is its own best summary.
+SHORT_TRANSCRIPT_CHARS = 120
+
+
 def summarize_meeting(transcript: str, max_tokens: int = 350) -> dict:
     """
     Generate a real abstractive summary of a meeting transcript.
@@ -31,13 +35,19 @@ def summarize_meeting(transcript: str, max_tokens: int = 350) -> dict:
             "output_tokens": int,
         }
     """
-    if not transcript or len(transcript.strip()) < 50:
-        return {
-            "summary": "Transcript too short to summarize.",
-            "model": DEFAULT_MODEL,
-            "input_tokens": 0,
-            "output_tokens": 0,
-        }
+    text = (transcript or "").strip()
+
+    if not text:
+        return {"summary": "", "model": DEFAULT_MODEL,
+                "input_tokens": 0, "output_tokens": 0}
+
+    # Below this, a "summary" would be longer than what was said. Return the
+    # words themselves rather than an apology — a two-line meeting is a real
+    # meeting, and "Transcript too short to summarize" reads like a failure
+    # when nothing failed.
+    if len(text) < SHORT_TRANSCRIPT_CHARS:
+        return {"summary": text, "model": DEFAULT_MODEL, "verbatim": True,
+                "input_tokens": 0, "output_tokens": 0}
 
     client = get_groq_client()
 
@@ -76,7 +86,9 @@ def generate_key_points(transcript: str, max_points: int = 5) -> list:
       an empty list rather than raising. Losing the bullets is a small loss;
       losing the summary with them is not.
     """
-    if not transcript or len(transcript.strip()) < 50:
+    # "Ammad will send the report on Friday" is 36 characters and is a real
+    # key point. Only skip when there is genuinely nothing to read.
+    if not transcript or len(transcript.strip()) < 25:
         return []
 
     import json
@@ -193,7 +205,10 @@ def extract_tasks_and_decisions(transcript: str) -> dict:
     """
     import json
 
-    if not transcript or len(transcript.strip()) < 60:
+    # Short meetings are often the ones that are pure decisions — "we are
+    # going with Postgres, Ammad does the migration" is 55 characters and
+    # contains both a decision and a task.
+    if not transcript or len(transcript.strip()) < 25:
         return {"tasks": [], "decisions": []}
 
     client = get_groq_client()
