@@ -91,6 +91,17 @@ export default function RecordMeeting({ navigate , user }) {
 
   const startRecording = async () => {
     setError(null);
+
+    // On the Android app, recording belongs to the native side: it streams
+    // from the microphone, transcribes in 25-second slices while the meeting
+    // is still running, and stores the result on the device before any
+    // upload. A page in a WebView can do none of that, and the browser path
+    // below would send audio to a server that no longer transcribes.
+    if (window.RecallaNative?.hasOnDeviceSTT) {
+      window.RecallaNative.record();
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
