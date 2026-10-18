@@ -8,11 +8,12 @@ from .calendar_tools import CALENDAR_TOOLS, CALENDAR_FUNCTIONS
 from .email_tools    import EMAIL_TOOLS,    EMAIL_FUNCTIONS
 from .desktop_tools  import DESKTOP_TOOLS,  DESKTOP_FUNCTIONS
 from .memory_tools   import MEMORY_TOOLS,   MEMORY_FUNCTIONS
+from .recall_tools   import RECALL_TOOLS,   RECALL_FUNCTIONS
 from .link_tools     import LINK_TOOLS,     LINK_FUNCTIONS
 
 # Combined schemas for Groq tool-use
 ALL_TOOLS = (REMINDER_TOOLS + CALENDAR_TOOLS + EMAIL_TOOLS + MEMORY_TOOLS
-             + LINK_TOOLS + DESKTOP_TOOLS)
+             + LINK_TOOLS + RECALL_TOOLS + DESKTOP_TOOLS)
 
 # Combined function dispatch table
 ALL_FUNCTIONS = {
@@ -21,6 +22,7 @@ ALL_FUNCTIONS = {
     **EMAIL_FUNCTIONS,
     **MEMORY_FUNCTIONS,
     **LINK_FUNCTIONS,
+    **RECALL_FUNCTIONS,
     **DESKTOP_FUNCTIONS,
 }
 
@@ -31,9 +33,10 @@ DEVICE_ONLY = set(DESKTOP_FUNCTIONS)
 
 # Links work on every device — they are the mobile answer to open_app.
 CLOUD_TOOLS = (REMINDER_TOOLS + CALENDAR_TOOLS + EMAIL_TOOLS + MEMORY_TOOLS
-               + LINK_TOOLS)
+               + LINK_TOOLS + RECALL_TOOLS)
 CLOUD_FUNCTIONS = {**REMINDER_FUNCTIONS, **CALENDAR_FUNCTIONS, **EMAIL_FUNCTIONS,
-                   **MEMORY_FUNCTIONS, **LINK_FUNCTIONS}
+                   **MEMORY_FUNCTIONS, **LINK_FUNCTIONS,
+                   **RECALL_FUNCTIONS}
 
 
 def tools_for(channel: str = "web"):

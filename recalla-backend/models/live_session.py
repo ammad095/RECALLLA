@@ -137,8 +137,11 @@ def process_chunk(sid, file_path, is_first=False, offset=None):
         try:
             check_audio(file_path)
         except EmptyAudio:
+            # process_chunk's contract is (state, new_segments). Returning a
+            # dict here made the caller unpack its keys as strings, and
+            # **state then failed with "'str' object is not a mapping".
             s["busy"] = False
-            return {"segments": [], "skipped": "no audio in this window"}
+            return _public(s), []
 
         model = get_model(LIVE_MODEL)
         result = model.transcribe(

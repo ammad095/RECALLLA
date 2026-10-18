@@ -7,6 +7,7 @@ import traceback
 import uuid
 
 from models.transcription import (
+    TranscriptionUnavailable,
     transcribe_audio,
     create_job,
     get_job,
@@ -216,6 +217,12 @@ async def session_chunk(
             session_id, path, is_first=bool(is_first), offset=offset
         )
         return JSONResponse({"success": True, "new_segments": new_segments, **state})
+    except TranscriptionUnavailable as e:
+        # Deployed servers carry no speech model — transcription happens in
+        # the Recalla app on the user's device. 501 rather than 500: nothing
+        # is broken, this server simply does not offer the capability, and
+        # the client should stop retrying and say so.
+        raise HTTPException(status_code=501, detail=str(e))
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

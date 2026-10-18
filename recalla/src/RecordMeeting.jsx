@@ -12,6 +12,8 @@ import {
   startLiveSession, sendLiveChunk, finalizeLiveSession,
 } from "./api";
 import { createLiveRecorder } from "./liveRecorder";
+import { BrowserTranscription, browserSttSupported, transcribeFile } from "./localStt";
+import { assignSpeakers } from "./diarize";
 import { summarizeTranscript } from "./agent_api";
 import { saveMeeting } from "./data_api";
 
@@ -53,6 +55,12 @@ export default function RecordMeeting({ navigate , user }) {
   const [liveSegments, setLiveSegments] = useState([]);
   const [liveLag, setLiveLag]           = useState(0);
   const [liveQueued, setLiveQueued]     = useState(0);
+  // First run downloads the speech model (~40 MB) into the browser cache.
+  const [modelPct, setModelPct]         = useState(null);
+  const browserSttRef                   = useRef(null);
+  // Stop reads the transcript synchronously, and setState would be a render
+  // behind — the last slice would be missing from the saved meeting.
+  const liveSegmentsRef                 = useRef([]);
 
   const liveRecorderRef  = useRef(null);
   const sessionIdRef     = useRef(null);
@@ -120,44 +128,72 @@ export default function RecordMeeting({ navigate , user }) {
       // is already built when the user stops. If the session can't be opened
       // we silently fall back to the original record-then-transcribe flow.
       setLiveSegments([]);
+      liveSegmentsRef.current = [];
       sessionIdRef.current = null;
       let live = false;
 
-      try {
-        const expectedSpeakers = participants.length > 0 ? participants.length : null;
-        const sess = await startLiveSession(expectedSpeakers);
-        sessionIdRef.current = sess.session_id;
-
-        const rec = createLiveRecorder({
-          stream,
-          windowSec: sess.window_seconds,
-          stepSec: sess.step_seconds,
-          onWindow: async ({ blob, offset, isFirst }) => {
-            const res = await sendLiveChunk(sessionIdRef.current, blob, { offset, isFirst });
-            if (res.new_segments?.length) {
-              setLiveSegments((prev) => [...prev, ...res.new_segments]);
-            }
-            setLiveLag(res.lag || 0);
-            setLiveQueued(liveRecorderRef.current?.pendingWindows || 0);
-          },
-        });
-        await rec.start();
-        liveRecorderRef.current = rec;
-        live = true;
-      } catch (e) {
-        console.warn("[Recalla] live mode unavailable, using batch:", e);
-        sessionIdRef.current = null;
+      // Transcription happens here, in this browser. The server carries no
+      // speech model — audio belongs to whoever recorded it and never
+      // leaves the device. Slices are cut every 25 seconds and transcribed
+      // as they close, so the transcript is nearly complete by the time
+      // anyone presses stop.
+      if (browserSttSupported()) {
+        try {
+          const bt = new BrowserTranscription({
+            onSegments: (segs) =>
+              setLiveSegments((prev) => {
+                const all = [...prev, ...segs].sort((a, b) => a.start - b.start);
+                liveSegmentsRef.current = all;
+                return all;
+              }),
+            onPending: setLiveQueued,
+            onModelProgress: setModelPct,
+            onError: (e) => console.warn("[Recalla] slice failed:", e),
+          });
+          await bt.start();
+          browserSttRef.current = bt;
+          live = true;
+        } catch (e) {
+          // There is no useful fallback: the server carries no speech model,
+          // so uploading would fail with a server-side error that tells the
+          // user nothing. Say what actually went wrong instead.
+          console.error("[Recalla] in-browser transcription failed:", e);
+          browserSttRef.current = null;
+          setError(
+            `Could not start transcription in this browser: ${e.message}. ` +
+            "Try Chrome or Edge, or record from the Recalla app."
+          );
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+      } else {
+        setError(
+          "This browser cannot transcribe locally. Recalla needs a recent " +
+          "Chrome, Edge, Firefox or Safari, or the Recalla app."
+        );
+        stream.getTracks().forEach((t) => t.stop());
+        return;
       }
+
       setIsLive(live);
 
-      // MediaRecorder still runs: it is the fallback source if live mode
-      // failed, and keeps a continuous copy of the audio either way.
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      recorder.onstop = () => { if (!sessionIdRef.current) handleRecordingStop(); };
-      recorder.start();
-      mediaRecorderRef.current = recorder;
+      // MediaRecorder only runs as the fallback. When the browser is
+      // transcribing, the PCM is already captured through the AudioContext,
+      // so a second encoded copy would waste memory — and its onstop would
+      // fire the old upload path alongside the local one, sending audio to
+      // a server that has no speech model.
+      if (!live) {
+        const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+        chunksRef.current = [];
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+        recorder.onstop = () => {
+          if (!sessionIdRef.current && !browserSttRef.current) handleRecordingStop();
+        };
+        recorder.start();
+        mediaRecorderRef.current = recorder;
+      } else {
+        mediaRecorderRef.current = null;
+      }
 
       setState("recording");
       setElapsed(0);
@@ -211,12 +247,72 @@ export default function RecordMeeting({ navigate , user }) {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
+
     if (timerRef.current) clearInterval(timerRef.current);
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
 
-    // Live mode: the transcript already exists, so this is just clustering,
-    // tagging and the summary — a second or two rather than minutes.
-    if (sessionIdRef.current) handleLiveStop();
+    // The transcript already exists — this is just the summary.
+    if (browserSttRef.current) handleLocalStop();
+    else if (sessionIdRef.current) handleLiveStop();
+  };
+
+  const handleLocalStop = async () => {
+    setState("processing");
+    setCurrentStep(0);
+    setProgress(30);
+
+    const bt = browserSttRef.current;
+    const { durationMs } = await bt.stop();
+
+    // Wait only for slices still decoding — usually the final one. Capped,
+    // because a wedged worker must not strand the meeting.
+    const deadline = Date.now() + 120000;
+    while (bt.pendingCount() > 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    bt.release();
+    browserSttRef.current = null;
+
+    setCurrentStep(1);
+    setProgress(70);
+
+    // Group the voice fingerprints into speakers. The participant list is
+    // passed as a hint: someone who says two people were in the room is
+    // better evidence than a clustering score from half a minute of audio.
+    const segs = assignSpeakers(
+      liveSegmentsRef.current,
+      participants.length > 1 ? participants.length : null
+    );
+    const fullText = segs.map((x) => x.text).join(" ").replace(/\s+/g, " ").trim();
+
+    let aiSummary = null, keyPoints = [];
+    try {
+      const sum = await summarizeTranscript(fullText, true);
+      aiSummary = sum.summary;
+      keyPoints = sum.key_points || [];
+    } catch (e) {
+      console.error("Summary failed:", e);
+    }
+
+    setCurrentStep(2);
+    setProgress(95);
+
+    try {
+      const saved = await saveMeeting({
+        title: title.trim() || "Untitled meeting",
+        full_text: fullText,
+        segments: segs,
+        duration_s: Math.round(durationMs / 1000),
+        summary: aiSummary,
+        key_points: keyPoints,
+        participants,
+        meeting_type: meetingType,
+      });
+      navigate("meeting", saved.id);
+    } catch (e) {
+      setError(`Could not save the meeting: ${e.message}`);
+      setState("idle");
+    }
   };
 
   const handleLiveStop = async () => {
@@ -370,14 +466,72 @@ export default function RecordMeeting({ navigate , user }) {
     }
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    if (!browserSttSupported()) {
+      setError("This browser cannot transcribe locally. Try Chrome, Edge or Safari.");
+      return;
+    }
+
     setState("processing");
     setProgress(0);
-    setCurrentStep(0);
-    chunksRef.current = [file];
-    handleRecordingStop();
+    setCurrentStep(1);
+    setError(null);
+    setLiveSegments([]);
+    liveSegmentsRef.current = [];
+
+    try {
+      // The same browser worker that handles live recording. Uploading to
+      // the server is not an option: it carries no speech model, and the
+      // file would come back as a 501.
+      const { segments, durationMs } = await transcribeFile(file, {
+        onProgress: ({ stage, pct }) => {
+          setModelPct(stage === "model" ? pct : null);
+          if (stage === "transcribe") setProgress(Math.max(10, pct * 0.7));
+        },
+        onSegments: (segs) =>
+          setLiveSegments((prev) => {
+            const all = [...prev, ...segs].sort((a, b) => a.start - b.start);
+            liveSegmentsRef.current = all;
+            return all;
+          }),
+      });
+
+      const withSpeakers = assignSpeakers(
+        segments,
+        participants.length > 1 ? participants.length : null
+      );
+      const fullText = withSpeakers.map((x) => x.text).join(" ").replace(/\s+/g, " ").trim();
+
+      setCurrentStep(2);
+      setProgress(80);
+
+      let aiSummary = null, keyPoints = [];
+      try {
+        const sum = await summarizeTranscript(fullText, true);
+        aiSummary = sum.summary;
+        keyPoints = sum.key_points || [];
+      } catch (err) {
+        console.error("Summary failed:", err);
+      }
+
+      const saved = await saveMeeting({
+        title: title.trim() || file.name.replace(/\.[^.]+$/, ""),
+        full_text: fullText,
+        segments: withSpeakers,
+        duration_s: Math.round(durationMs / 1000),
+        summary: aiSummary,
+        key_points: keyPoints,
+        participants,
+        meeting_type: meetingType,
+      });
+      navigate("meeting", saved.id);
+    } catch (err) {
+      setError(`Could not transcribe that file: ${err.message}`);
+      setState("idle");
+    }
   };
 
   const fmtTime = (s) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;

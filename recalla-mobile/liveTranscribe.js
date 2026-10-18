@@ -20,10 +20,18 @@
  * someone stops is measured in seconds.
  */
 
-import { RealtimeTranscriber } from "whisper.rn/src/realtime-transcription";
-import { AudioPcmStreamAdapter } from "whisper.rn/src/realtime-transcription/adapters/AudioPcmStreamAdapter";
+import { prepareModel, nativeSpeechAvailable } from "./whisper";
 
-import { prepareModel } from "./whisper";
+// Same reasoning as whisper.js: these are native modules, absent in Expo Go.
+// Requiring them lazily keeps the app loadable there so everything other
+// than recording can still be tested.
+function nativeParts() {
+  const { RealtimeTranscriber } = require("whisper.rn/src/realtime-transcription");
+  const {
+    AudioPcmStreamAdapter,
+  } = require("whisper.rn/src/realtime-transcription/adapters/AudioPcmStreamAdapter");
+  return { RealtimeTranscriber, AudioPcmStreamAdapter };
+}
 
 const SLICE_SEC = 25;
 
@@ -46,6 +54,13 @@ export class LiveTranscription {
   }
 
   async start() {
+    if (!nativeSpeechAvailable()) {
+      throw new Error(
+        "Recording needs the full Recalla app — Expo Go cannot load the " +
+        "speech model or the microphone stream."
+      );
+    }
+    const { RealtimeTranscriber, AudioPcmStreamAdapter } = nativeParts();
     const ctx = await prepareModel();
 
     this.startedAt = Date.now();

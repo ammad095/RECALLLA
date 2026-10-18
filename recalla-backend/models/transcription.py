@@ -190,7 +190,11 @@ def check_audio(file_path: str) -> float:
         _require_whisper()
         audio = whisper.load_audio(file_path)
         seconds = len(audio) / 16000.0
-    except EmptyAudio:
+    except (EmptyAudio, TranscriptionUnavailable):
+        # A server with no speech model is a different problem from a silent
+        # clip, and callers handle them differently. Letting the generic
+        # branch below swallow it reported "no audio in this window" for a
+        # missing model, which sent debugging in the wrong direction.
         raise
     except Exception as e:
         raise EmptyAudio(f"That audio could not be read ({type(e).__name__}).")

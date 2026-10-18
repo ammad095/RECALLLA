@@ -52,9 +52,24 @@ def search_memory(query: str, limit: int = 5, kind: str = "") -> dict:
                         "discussed, or that meeting has not been recorded yet."),
         }
 
+    # Whether the answer can be trusted is part of the answer. The agent is
+    # told how strong the match was so it can hedge honestly rather than
+    # stating a weak retrieval with the same confidence as a strong one.
+    top = max((h["similarity"] for h in hits), default=0.0)
+    confidence = ("high" if top >= 0.40 else
+                  "moderate" if top >= 0.25 else "low")
+
     return {
         "success": True,
         "count": len(hits),
+        "confidence": confidence,
+        "top_relevance": round(top, 3),
+        "guidance": {
+            "high": "Strong match — answer directly and cite the meeting.",
+            "moderate": "Reasonable match — answer, but say which meeting it came from.",
+            "low": ("Weak match. Say you are not certain this was discussed, "
+                    "and show what you did find rather than asserting it."),
+        }[confidence],
         "results": [{
             "text": h["text"],
             "meeting": h["meeting_title"],

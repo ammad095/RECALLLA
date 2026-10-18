@@ -16,8 +16,26 @@
  * moving to another model later is a URL change, not a rewrite.
  */
 
-import { initWhisper } from "whisper.rn";
 import * as FileSystem from "expo-file-system";
+
+/**
+ * whisper.rn is a native module, so it does not exist inside Expo Go — only
+ * in a development or production build. Importing it at module load would
+ * crash the app on launch there, taking the whole UI with it for the sake of
+ * one feature. Resolve it lazily instead, and let callers ask whether
+ * on-device speech is available.
+ */
+let _initWhisper = null;
+
+export function nativeSpeechAvailable() {
+  if (_initWhisper) return true;
+  try {
+    _initWhisper = require("whisper.rn").initWhisper;
+    return Boolean(_initWhisper);
+  } catch {
+    return false;
+  }
+}
 
 const MODEL_NAME = "ggml-base.en-q5_1.bin";
 const MODEL_URL =
@@ -67,8 +85,14 @@ async function ensureDownloaded(onProgress) {
 export async function prepareModel(onProgress) {
   if (_ctx) return _ctx;
   try {
+    if (!nativeSpeechAvailable()) {
+      throw new Error(
+        "On-device transcription needs the full Recalla app. Expo Go cannot " +
+        "load the speech model."
+      );
+    }
     const path = await ensureDownloaded(onProgress);
-    _ctx = await initWhisper({ filePath: path });
+    _ctx = await _initWhisper({ filePath: path });
     _state.loaded = true;
     _state.error = null;
     return _ctx;

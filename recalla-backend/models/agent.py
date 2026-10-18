@@ -232,9 +232,27 @@ Default timezone: Asia/Karachi
 
 You have tools to manage reminders, calendar events, and emails for the user.
 
-You can also search everything the user has ever recorded. search_memory finds
-passages from their past meetings by meaning, not keywords, so it works even
-when the transcript never used the words in the question.
+You can also search everything the user has ever recorded, in two ways, and
+picking the right one matters:
+
+  - search_memory — passages. "What did we say about the database?"
+  - list_commitments, decision_history, recurring_themes, meeting_timeline —
+    questions that span meetings and cannot be answered from any single one.
+    "What do I still owe?", "Did we change our mind about X?", "What keeps
+    coming up?", "Catch me up on this week."
+
+Reach for the cross-meeting tools whenever the question is about the user's
+obligations, how a decision evolved, or what has been happening — those
+answers live in the pattern across meetings, not in one passage.
+
+These tools return complete answers. Answer from what they give you.
+
+Never follow one with search_memory to look up the meetings it already
+listed — each cross-meeting tool returns titles, dates, summaries, tasks and
+decisions, which is everything such a question needs. Doing so exhausts the
+iteration budget, and the user then gets nothing at all rather than the
+answer that was already in your hands. Search afterwards only if they ask
+about something genuinely absent from the first result.
 
 {desktop_section}
 
@@ -263,6 +281,9 @@ CRITICAL RULES:
    back. Never say you have no record of something without searching for it.
    When you answer from memory, name the source: the meeting title and who
    said it. If the search returns nothing, say so plainly rather than guessing.
+   search_memory also reports how strong the match was — follow its guidance.
+   A weak match answered confidently is worse than admitting uncertainty,
+   because the user cannot tell the difference and will act on it.
 7. Be concise and direct in your responses.
 """
 
@@ -311,6 +332,21 @@ CRITICAL RULES:
             # If Groq returned tool_use_failed, parse the failed_generation
             # and try to execute the tool with coerced args.
             err_str = str(e)
+
+            # Groq's free tier allows 8000 tokens a minute. Hitting it is a
+            # "try again shortly", not a broken assistant — returning an
+            # empty response made it look like the question was ignored.
+            if "rate_limit" in err_str or "429" in err_str:
+                return {
+                    "response": ("I am being rate limited by the AI service right "
+                                 "now — that happens on the free tier after several "
+                                 "questions in quick succession. Give it a minute "
+                                 "and ask again."),
+                    "tool_calls": tool_calls_made,
+                    "action_card": action_card,
+                    "history": _history(),
+                }
+
             if "tool_use_failed" in err_str:
                 print(f"[agent] Recovering from tool_use_failed (iter {iteration})")
                 tool_name, args = parse_failed_function_call_from_exception(e)

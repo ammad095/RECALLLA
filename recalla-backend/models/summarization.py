@@ -209,16 +209,22 @@ def extract_tasks_and_decisions(transcript: str) -> dict:
     # going with Postgres, Ammad does the migration" is 55 characters and
     # contains both a decision and a task.
     if not transcript or len(transcript.strip()) < 25:
-        return {"tasks": [], "decisions": []}
+        return {"title": "", "tasks": [], "decisions": []}
 
     client = get_groq_client()
 
     system = (
-        "Extract action items and decisions from this meeting transcript.\n"
+        "Extract action items and decisions from this meeting transcript, and "
+        "give the meeting a title.\n"
         "Reply with a JSON object of exactly this shape and nothing else:\n"
-        '{"tasks": [{"text": "", "assignee": "", "due": "", "priority": "high|medium|low"}],\n'
+        '{"title": "",\n'
+        ' "tasks": [{"text": "", "assignee": "", "due": "", "priority": "high|medium|low"}],\n'
         ' "decisions": [{"text": "", "context": ""}]}\n\n'
         "Rules:\n"
+        "- title: three to six words naming what the meeting was ABOUT, the way "
+        "a person would write it in a calendar. \"Database Migration Planning\", "
+        "not \"Meeting Summary\" or \"Discussion About Various Topics\". No date, "
+        "no the word 'meeting' unless it reads naturally.\n"
         "- A task is something a person committed to do. Speculation "
         '("we could maybe look at this") is not a task.\n'
         "- assignee is the speaker name if stated, otherwise an empty string. "
@@ -246,7 +252,7 @@ def extract_tasks_and_decisions(transcript: str) -> dict:
             content = _ask().choices[0].message.content
         except Exception as e2:
             print(f"[Recalla] Extraction unavailable: {e2}")
-            return {"tasks": [], "decisions": []}
+            return {"title": "", "tasks": [], "decisions": []}
 
     text = (content or "").strip()
     if text.startswith("```"):
@@ -255,7 +261,7 @@ def extract_tasks_and_decisions(transcript: str) -> dict:
     try:
         data = json.loads(text)
     except Exception:
-        return {"tasks": [], "decisions": []}
+        return {"title": "", "tasks": [], "decisions": []}
 
     def _clean(items, fields):
         out = []
@@ -271,7 +277,17 @@ def extract_tasks_and_decisions(transcript: str) -> dict:
             out.append(row)
         return out
 
+    title = str(data.get("title") or "").strip().strip('"')
+    # Guard against the model returning a label rather than a subject — a
+    # meeting called "Meeting Summary" is no better than "Untitled".
+    if len(title) > 70 or title.lower() in {
+        "meeting", "meeting summary", "summary", "untitled", "untitled meeting",
+        "discussion", "transcript", "notes",
+    }:
+        title = ""
+
     return {
+        "title": title,
         "tasks": _clean(data.get("tasks"), ["assignee", "due", "priority"]),
         "decisions": _clean(data.get("decisions"), ["context"]),
     }

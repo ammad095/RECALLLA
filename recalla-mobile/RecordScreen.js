@@ -8,7 +8,14 @@ import {
   ActivityIndicator, Pressable, ScrollView, StyleSheet,
   Text, TextInput, View,
 } from "react-native";
-import { Audio } from "expo-audio";
+// expo-audio exports these at the top level. `Audio` exists only as a types
+// namespace, so importing it gives undefined at runtime — which is what
+// "Cannot read property 'requestRecordingPermissionsAsync' of undefined"
+// was. The old expo-av grouped them under Audio; this package does not.
+import {
+  requestRecordingPermissionsAsync,
+  getRecordingPermissionsAsync,
+} from "expo-audio";
 
 import { LiveTranscription } from "./liveTranscribe";
 import { createMeeting, appendSegments, updateMeeting } from "./store";
@@ -38,9 +45,15 @@ export default function RecordScreen({ onDone, onCancel }) {
   const begin = useCallback(async () => {
     setError(null);
     try {
-      const perm = await Audio.requestRecordingPermissionsAsync();
+      let perm = await getRecordingPermissionsAsync();
+      if (!perm.granted && perm.canAskAgain !== false) {
+        perm = await requestRecordingPermissionsAsync();
+      }
       if (!perm.granted) {
-        setError("Recalla needs microphone access to record a meeting.");
+        setError(
+          "Recalla needs microphone access to record. Enable it in Settings " +
+          "and try again."
+        );
         return;
       }
 

@@ -22,7 +22,7 @@ import { WebView } from "react-native-webview";
 
 import RecordScreen from "./RecordScreen";
 import TranscriptScreen from "./TranscriptScreen";
-import { prepareModel } from "./whisper";
+import { prepareModel, nativeSpeechAvailable } from "./whisper";
 import { C } from "./theme";
 
 const APP_URL = "https://141-145-152-202.sslip.io";
@@ -34,7 +34,7 @@ const APP_URL = "https://141-145-152-202.sslip.io";
  * button hands off to the native screen; when it does not — a laptop browser
  * — it keeps its own behaviour. One build, two capabilities.
  */
-const BRIDGE = `
+const bridgeSource = (hasStt) => `
 (function () {
   if (window.RecallaNative) return;
   const waiting = {};
@@ -42,7 +42,7 @@ const BRIDGE = `
 
   window.RecallaNative = {
     platform: 'android',
-    hasOnDeviceSTT: true,
+    hasOnDeviceSTT: __HAS_STT__,
 
     /** Open the native recorder. */
     record() {
@@ -74,7 +74,7 @@ const BRIDGE = `
   window.dispatchEvent(new Event('recalla-native-ready'));
   true;
 })();
-`;
+`.replace('__HAS_STT__', hasStt ? 'true' : 'false');
 
 export default function App() {
   const webRef = useRef(null);
@@ -163,7 +163,7 @@ export default function App() {
       <WebView
         ref={webRef}
         source={{ uri: APP_URL }}
-        injectedJavaScriptBeforeContentLoaded={BRIDGE}
+        injectedJavaScriptBeforeContentLoaded={bridgeSource(nativeSpeechAvailable())}
         onMessage={onMessage}
         onLoadEnd={() => setLoaded(true)}
         javaScriptEnabled

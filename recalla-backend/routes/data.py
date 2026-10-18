@@ -261,6 +261,40 @@ def _reindex(meeting_id: str, extract: bool = True):
             result = extract_tasks_and_decisions(transcript)
             m.action_items = result.get("tasks") or []
             m.decisions = result.get("decisions") or []
+
+            # Name the meeting if nobody did. A list of "Untitled meeting"
+            # rows is unusable, and the model has just read the transcript
+            # to extract tasks — naming it costs nothing extra. A title the
+            # user typed is never overwritten.
+            suggested = (result.get("title") or "").strip()
+            current = (m.title or "").strip()
+            if suggested and (not current or current.lower() in {
+                "untitled meeting", "untitled", "new meeting", "recording",
+            }):
+                m.title = suggested
+                print(f"[Recalla] Named meeting {m.id}: {suggested}")
+
+            # Tags used to come from whatever the client sent, and the
+            # browser sends none — leaving every meeting untagged and
+            # recurring_themes with nothing to count. Derive them here
+            # instead, where every meeting passes through regardless of
+            # which device recorded it.
+            try:
+                from models.tagging import extract_tags_and_entities
+
+                tagged = extract_tags_and_entities(m.full_text or "")
+                db.execute(delete(Tag).where(Tag.meeting_id == m.id))
+                seen = set()
+                for kind, key in (("topic", "auto_tags"), ("person", "people"),
+                                  ("org", "orgs"), ("date", "dates")):
+                    for value in (tagged.get(key) or [])[:8]:
+                        v = str(value).strip()
+                        if v and (kind, v.lower()) not in seen:
+                            seen.add((kind, v.lower()))
+                            db.add(Tag(meeting_id=m.id, kind=kind, value=v))
+            except Exception as e:
+                print(f"[Recalla] Tagging skipped for {m.id}: {e}")
+
             db.commit()
 
             index_extracted(db, m, m.action_items, "task")
