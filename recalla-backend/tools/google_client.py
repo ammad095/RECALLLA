@@ -19,6 +19,7 @@ never the default.
 
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -68,6 +69,29 @@ def _stored_connection(user_id: str):
         db.close()
 
 
+def _mark_auth_error(user_id: str, message: Optional[str]):
+    """Remember that Google refused these credentials, or that it stopped."""
+    from sqlalchemy import select
+    from db.session import SessionLocal
+    from db.models import UserConnection
+
+    db = SessionLocal()
+    try:
+        conn = db.scalar(
+            select(UserConnection).where(
+                UserConnection.user_id == user_id,
+                UserConnection.provider == "google",
+            )
+        )
+        if conn and conn.auth_error != message:
+            conn.auth_error = message
+            db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
 def _persist_refreshed(user_id: str, access_token: str, expiry):
     """Write a rotated access token back so the next call reuses it."""
     from sqlalchemy import select
@@ -113,6 +137,15 @@ def _credentials():
     if user_id:
         conn = _stored_connection(user_id)
         if conn and conn.refresh_token:
+            # Without a known expiry, Credentials treats a stale access token
+            # as still valid, skips the refresh, and the failure then happens
+            # deep inside the API call where it cannot be attributed. Dropping
+            # the token forces the refresh to run here, where invalid_grant
+            # can be recognised and recorded.
+            if not conn.expires_at:
+                conn_access_token_unknown_expiry = True
+            else:
+                conn_access_token_unknown_expiry = False
             # A grant that skipped the permission tick-boxes still yields a
             # valid token — it just 403s on the first real call, with a message
             # about scopes that no end user can act on. Fail here instead.
@@ -126,7 +159,7 @@ def _credentials():
                     "tick every permission box on the Google screen."
                 )
             refresh_token = conn.refresh_token
-            access_token = conn.access_token
+            access_token = None if conn_access_token_unknown_expiry else conn.access_token
 
     # Fallback: single-account .env mode, for a developer running solo.
     if not refresh_token:
@@ -149,8 +182,25 @@ def _credentials():
 
     # Access tokens last about an hour; refresh and store the new one.
     if not creds.valid:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except Exception as e:
+            msg = str(e)
+            if "invalid_grant" in msg:
+                friendly = (
+                    "Google has expired this connection. Open Connectors and press "
+                    "Reconnect on Google. (Apps still in Testing have their access "
+                    "revoked after seven days — publishing the app in Google Cloud "
+                    "stops this recurring.)"
+                )
+            else:
+                friendly = f"Google refused the stored credentials: {msg[:120]}"
+            if user_id:
+                _mark_auth_error(user_id, friendly)
+            raise GoogleNotConnected(friendly)
+
         if user_id:
+            _mark_auth_error(user_id, None)      # working again
             _persist_refreshed(
                 user_id, creds.token,
                 creds.expiry.replace(tzinfo=timezone.utc) if creds.expiry
@@ -193,6 +243,15 @@ def is_google_configured() -> bool:
     if user_id:
         conn = _stored_connection(user_id)
         if conn and conn.refresh_token:
+            # Without a known expiry, Credentials treats a stale access token
+            # as still valid, skips the refresh, and the failure then happens
+            # deep inside the API call where it cannot be attributed. Dropping
+            # the token forces the refresh to run here, where invalid_grant
+            # can be recognised and recorded.
+            if not conn.expires_at:
+                conn_access_token_unknown_expiry = True
+            else:
+                conn_access_token_unknown_expiry = False
             from routes.connectors import missing_scopes
 
             return not missing_scopes(conn.scopes)

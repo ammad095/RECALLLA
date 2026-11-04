@@ -266,6 +266,13 @@ class UserConnection(Base):
     connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=func.now())
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Why the stored credentials stopped working, if they have. A refresh
+    # token can die while the row still looks perfectly healthy — Google
+    # expires them after seven days for apps still in Testing — and a card
+    # reading "Connected" over a dead token is worse than one reading
+    # "Reconnect", because nothing tells the user to act.
+    auth_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     __table_args__ = (
         Index("ix_connection_user_provider", "user_id", "provider", unique=True),
         # One phone number maps to exactly one account. Without this a second

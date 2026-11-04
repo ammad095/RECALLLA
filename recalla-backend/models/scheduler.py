@@ -175,6 +175,22 @@ def check_due(now: Optional[datetime] = None) -> int:
     return sent
 
 
+# 03:00 UTC is 08:00 in Karachi: early enough to reconnect before the day's
+# demos, late enough that the warning is read rather than buried overnight.
+GOOGLE_HEALTH_HOUR_UTC = 3
+
+
+def check_google_health():
+    """Daily: make a real Gmail and Calendar call for every connected account."""
+    try:
+        from scripts.check_google_health import run
+
+        _, summary = run()
+        print(f"[scheduler] {summary}")
+    except Exception as e:
+        print(f"[scheduler] Google health check failed to run: {e}")
+
+
 def start():
     """Start the background scheduler. Safe to call once, at app startup."""
     global _scheduler
@@ -189,8 +205,18 @@ def start():
         id="recalla_reminders", replace_existing=True,
         max_instances=1, coalesce=True,      # never stack overlapping runs
     )
+    # Testing-mode refresh tokens die after seven days without any error until
+    # the next real request. Find out on a schedule, not during a demo.
+    _scheduler.add_job(
+        check_google_health, "cron", hour=GOOGLE_HEALTH_HOUR_UTC, minute=0,
+        id="recalla_google_health", replace_existing=True,
+        max_instances=1, coalesce=True,
+        misfire_grace_time=3600,             # still run if a restart overlapped 03:00
+    )
     _scheduler.start()
     print(f"[Recalla] Reminder scheduler running (every {CHECK_SECONDS}s)")
+    print(f"[Recalla] Google health check scheduled daily at "
+          f"{GOOGLE_HEALTH_HOUR_UTC:02d}:00 UTC")
     return _scheduler
 
 

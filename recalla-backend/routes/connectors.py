@@ -187,7 +187,13 @@ def list_connectors(user: User = Depends(get_current_user), db: Session = Depend
 
         # Connected but without the permissions that matter is worse than not
         # connected, because the card claims it works. Report it as partial.
-        if c["id"] == "google" and conn:
+        # An expired token still has a row and an email address, so without
+        # this the card reads "Connected" while every call fails.
+        if c["id"] == "google" and conn and conn.auth_error:
+            entry["state"] = "partial"
+            entry["reason"] = conn.auth_error
+
+        if c["id"] == "google" and conn and not conn.auth_error:
             lacking = missing_scopes(conn.scopes)
             if lacking:
                 entry["state"] = "partial"
