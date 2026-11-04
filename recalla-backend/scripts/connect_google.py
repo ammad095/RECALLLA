@@ -161,7 +161,14 @@ def main() -> int:
         conn.refresh_token = refresh
         conn.access_token = data.get("access_token")
         conn.scopes = granted
-        conn.account_email = args.email
+        # The Google account chosen on the consent screen need not match the
+        # Recalla login, so ask Google which mailbox this really is.
+        try:
+            info = requests.get("https://openidconnect.googleapis.com/v1/userinfo", timeout=20,
+                                headers={"Authorization": f"Bearer {data.get('access_token')}"})
+            conn.account_email = info.json().get("email") or args.email
+        except Exception:
+            conn.account_email = args.email
         conn.auth_error = None
         conn.expires_at = None
         db.add(conn)
