@@ -1,331 +1,164 @@
 // ============================================================
 // FILE PATH:  recalla/src/AskRecalla.jsx
-// PURPOSE:    Full-focus chat. Renders preview cards for email drafts
-//             (with Send/Cancel) and calendar events.
+// PURPOSE:    Chat with Recalla. Renders preview cards for email drafts
+//             (with Send/Cancel) and calendar events. Past chats open
+//             from a sheet on phones and a side panel on wide screens.
 // ============================================================
 
 import { useState, useRef, useEffect } from "react";
-import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
-import Sidebar from "./Sidebar";
+import {
+  Sparkles, ArrowUp, Plus, MessagesSquare, Pencil, Trash2, Mail, CalendarCheck,
+  CheckCircle2, XCircle, ExternalLink, Loader2, Send,
+} from "lucide-react";
 import { listChats, getChat, appendTurns, deleteChat, renameChat } from "./chats_api";
 import { agentChat, getAgentStatus, sendEmailDraft, cancelEmailDraft } from "./agent_api";
 import { useVoiceInput } from "./useVoiceInput";
 import MicButton, { MicStatus } from "./MicButton";
+import { Screen, Sheet } from "./ui/kit";
+import { useConfirm } from "./ui/useConfirm";
+import Markdown from "./ui/Markdown";
 
-// ── Email Preview Card ────────────────────────────────────────────────────
-const EmailPreviewCard = ({ preview, draftId, onSent, onCancelled }) => {
+// ── Email preview: nothing is sent until the user says so ─────────────────
+const EmailPreviewCard = ({ preview, draftId }) => {
   const [status, setStatus] = useState("pending"); // pending | sending | sent | cancelled | error
   const [error, setError]   = useState("");
 
-  const handleSend = async () => {
-    setStatus("sending");
-    setError("");
-    try {
-      await sendEmailDraft(draftId);
-      setStatus("sent");
-      onSent?.();
-    } catch (e) {
-      setStatus("error");
-      setError(e.message);
-    }
+  const send = async () => {
+    setStatus("sending"); setError("");
+    try { await sendEmailDraft(draftId); setStatus("sent"); }
+    catch (e) { setStatus("error"); setError(e.message); }
+  };
+  const cancel = async () => {
+    try { await cancelEmailDraft(draftId); setStatus("cancelled"); }
+    catch (e) { setError(e.message); }
   };
 
-  const handleCancel = async () => {
-    try {
-      await cancelEmailDraft(draftId);
-      setStatus("cancelled");
-      onCancelled?.();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const isLocked = status === "sent" || status === "cancelled" || status === "sending";
+  const head = {
+    sent:      { text: "Email sent", cls: "text-brand", Icon: CheckCircle2 },
+    cancelled: { text: "Draft discarded", cls: "text-subtle", Icon: XCircle },
+    sending:   { text: "Sending…", cls: "text-ai", Icon: Loader2 },
+  }[status] || { text: "Email draft — check before sending", cls: "text-ai", Icon: Mail };
 
   return (
-    <div className="corners corners-violet fade-up" style={{
-      background: COLORS.surface,
-      border: `1px solid ${status === "sent" ? COLORS.borderEmerald : COLORS.borderViolet}`,
-      padding: "16px 18px", marginTop: 10, maxWidth: 540,
-    }}>
-      {/* Header */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${COLORS.border}`,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="status-dot" style={{
-            background: status === "sent" ? COLORS.emerald : status === "cancelled" ? COLORS.textTertiary : COLORS.violet,
-          }}/>
-          <span style={{
-            fontFamily: FONTS.mono, fontSize: 10, fontWeight: 600,
-            color: status === "sent" ? COLORS.emerald : status === "cancelled" ? COLORS.textTertiary : COLORS.violet,
-            textTransform: "uppercase", letterSpacing: "0.1em",
-          }}>
-            {status === "sent" ? "Email Sent ✓" : status === "cancelled" ? "Cancelled" : status === "sending" ? "Sending..." : "Email Draft"}
-          </span>
-        </div>
+    <div className={`card mt-2 w-full overflow-hidden animate-rise ${status === "sent" ? "border-brand/40" : "border-ai/40"}`}>
+      <div className={`flex items-center gap-2 border-b border-line px-4 py-2.5 text-sm font-semibold ${head.cls}`}>
+        <head.Icon size={16} className={status === "sending" ? "animate-spin" : ""} /> {head.text}
       </div>
-
-      {/* Fields */}
-      <div style={{ marginBottom: 6 }}>
-        <div style={{ fontFamily: FONTS.mono, fontSize: 9, color: COLORS.textTertiary, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>To</div>
-        <div style={{ fontSize: 13, color: COLORS.textPrimary, marginBottom: 10 }}>{preview.to}</div>
-      </div>
-
-      {preview.cc && (
-        <div style={{ marginBottom: 6 }}>
-          <div style={{ fontFamily: FONTS.mono, fontSize: 9, color: COLORS.textTertiary, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>CC</div>
-          <div style={{ fontSize: 13, color: COLORS.textPrimary, marginBottom: 10 }}>{preview.cc}</div>
-        </div>
-      )}
-
-      <div style={{ marginBottom: 6 }}>
-        <div style={{ fontFamily: FONTS.mono, fontSize: 9, color: COLORS.textTertiary, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Subject</div>
-        <div style={{ fontSize: 14, fontWeight: 500, color: COLORS.textPrimary, marginBottom: 12 }}>{preview.subject}</div>
-      </div>
-
-      <div style={{
-        fontSize: 13, lineHeight: 1.6, color: COLORS.textPrimary,
-        whiteSpace: "pre-wrap", padding: "10px 12px",
-        background: COLORS.bg, border: `1px solid ${COLORS.border}`,
-        marginBottom: 14, fontFamily: FONTS.body,
-      }}>
-        {preview.body}
-      </div>
-
-      {error && (
-        <div style={{
-          color: COLORS.red, fontFamily: FONTS.mono, fontSize: 11,
-          marginBottom: 10, padding: "6px 10px",
-          background: "rgba(248,113,113,0.10)", border: "1px solid rgba(248,113,113,0.3)",
-        }}>
-          {error}
-        </div>
-      )}
-
-      {/* Actions */}
-      {!isLocked && (
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button
-            onClick={handleCancel}
-            style={{
-              background: "transparent", border: `1px solid ${COLORS.border}`,
-              color: COLORS.textSecondary, padding: "8px 16px",
-              fontFamily: FONTS.mono, fontSize: 11, fontWeight: 600,
-              textTransform: "uppercase", letterSpacing: "0.1em",
-              cursor: "pointer", borderRadius: 999,
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSend}
-            style={{
-              background: `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})`,
-              color: COLORS.bg, border: "none", padding: "8px 22px",
-              fontFamily: FONTS.mono, fontSize: 11, fontWeight: 600,
-              textTransform: "uppercase", letterSpacing: "0.1em",
-              cursor: "pointer", borderRadius: 999,
-            }}
-          >
-            Send →
-          </button>
+      <dl className="space-y-2 px-4 pt-3 text-sm">
+        <div className="flex gap-2"><dt className="w-14 shrink-0 text-subtle">To</dt><dd className="min-w-0 break-words">{preview.to}</dd></div>
+        {preview.cc && <div className="flex gap-2"><dt className="w-14 shrink-0 text-subtle">Cc</dt><dd className="min-w-0 break-words">{preview.cc}</dd></div>}
+        <div className="flex gap-2"><dt className="w-14 shrink-0 text-subtle">Subject</dt><dd className="min-w-0 font-medium">{preview.subject}</dd></div>
+      </dl>
+      <p className="m-4 mt-3 rounded-xl bg-surface-3/50 p-3 text-sm leading-relaxed whitespace-pre-wrap">{preview.body}</p>
+      {error && <p className="mx-4 mb-3 text-sm text-danger">{error}</p>}
+      {(status === "pending" || status === "error") && (
+        <div className="flex gap-2 px-4 pb-4">
+          <button onClick={cancel} className="btn btn-secondary flex-1">Discard</button>
+          <button onClick={send} className="btn btn-primary flex-1"><Send size={16} /> Send</button>
         </div>
       )}
     </div>
   );
 };
 
-// ── Calendar Event Card ───────────────────────────────────────────────────
 const CalendarEventCard = ({ event }) => {
   const start = event.start ? new Date(event.start) : null;
   return (
-    <div className="corners corners-cyan fade-up" style={{
-      background: COLORS.surface,
-      border: `1px solid rgba(34,211,238,0.30)`,
-      padding: "14px 18px", marginTop: 8, maxWidth: 480,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <span className="status-dot" style={{ background: COLORS.cyan }}/>
-        <span style={{
-          fontFamily: FONTS.mono, fontSize: 10, fontWeight: 600, color: COLORS.cyan,
-          textTransform: "uppercase", letterSpacing: "0.1em",
-        }}>
-          Calendar Event Created
-        </span>
-      </div>
-      <div style={{ fontSize: 15, fontWeight: 500, color: COLORS.textPrimary, marginBottom: 6 }}>
-        {event.title || event.summary}
-      </div>
-      <div style={{
-        fontFamily: FONTS.mono, fontSize: 11, color: COLORS.textSecondary,
-        display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-      }}>
-        {start && <span>{start.toLocaleString()}</span>}
-        {event.attendees && event.attendees.length > 0 && (
-          <>
-            <span style={{ color: COLORS.textTertiary }}>·</span>
-            <span>{event.attendees.length} attendee{event.attendees.length !== 1 ? "s" : ""}</span>
-          </>
-        )}
+    <div className="card mt-2 flex w-full gap-3 border-info/40 p-3.5 animate-rise">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-info/12 text-info"><CalendarCheck size={20} /></span>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-semibold text-info">Added to your calendar</div>
+        <div className="font-medium">{event.title || event.summary}</div>
+        <div className="mt-0.5 text-[13px] text-subtle">
+          {start && start.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+          {event.attendees?.length > 0 && ` · ${event.attendees.length} invited`}
+        </div>
         {event.html_link && (
-          <>
-            <span style={{ color: COLORS.textTertiary }}>·</span>
-            <a href={event.html_link} target="_blank" rel="noreferrer" style={{ color: COLORS.cyan, textDecoration: "none" }}>
-              Open in Google →
-            </a>
-          </>
+          <a href={event.html_link} target="_blank" rel="noreferrer"
+             className="mt-2 inline-flex min-h-9 items-center gap-1 text-sm font-medium text-info">
+            Open in Google Calendar <ExternalLink size={14} />
+          </a>
         )}
       </div>
     </div>
   );
 };
 
-// ── Generic action card (reminders, etc.) ─────────────────────────────────
-const ActionCard = ({ action }) => {
-  // Email draft uses its own card
-  if (action.tool === "draft_email" && action.result?.success && action.result?.preview) {
-    return <EmailPreviewCard preview={action.result.preview} draftId={action.result.draft_id}/>;
-  }
-
-  // Calendar event creation uses its own card
-  if (action.tool === "create_calendar_event" && action.result?.success) {
-    return <CalendarEventCard event={action.result}/>;
-  }
-
-  // A link has to be tapped by the user. Browsers block a page from opening
-  // apps on its own — deliberately — but a tap is a user gesture, so this is
-  // what actually opens Netflix on the phone in their hand rather than on the
-  // laptop running the backend.
-  if (action.tool === "open_link" && action.result?.url) {
-    return <OpenLinkCard result={action.result}/>;
-  }
-
-  // Generic action chip for everything else
-  const isSuccess = action.result?.success;
-  const accent = isSuccess ? COLORS.emerald : COLORS.red;
-
-  let title  = action.tool;
-  let detail = "";
-  if (action.tool === "create_reminder" && action.result?.reminder) {
-    title = "Reminder created";
-    detail = `${action.result.reminder.title} — ${new Date(action.result.reminder.datetime).toLocaleString()}`;
-  } else if (action.tool === "list_reminders") {
-    title = "Looked up reminders"; detail = `${action.result?.count || 0} found`;
-  } else if (action.tool === "complete_reminder") {
-    title = "Marked complete"; detail = action.result?.message || "";
-  } else if (action.tool === "delete_reminder") {
-    title = "Deleted reminder"; detail = action.result?.message || "";
-  } else if (action.tool === "list_calendar_events") {
-    title = "Checked calendar"; detail = `${action.result?.count || 0} events`;
-  } else if (action.tool === "find_free_slot") {
-    title = "Found free slot"; detail = action.result?.message || "";
-  } else if (action.tool === "delete_calendar_event") {
-    title = "Event deleted"; detail = action.result?.message || "";
-  } else if (action.tool === "read_recent_emails") {
-    title = "Read inbox"; detail = `${action.result?.count || 0} emails`;
-  } else if (action.tool === "search_emails") {
-    title = "Searched emails"; detail = `${action.result?.count || 0} results`;
-  } else if (!isSuccess) {
-    detail = action.result?.error || action.result?.message || "Failed";
-  }
-
-  return (
-    <div className="corners" style={{
-      background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-      padding: "10px 14px", marginTop: 8,
-      display: "flex", alignItems: "center", gap: 10,
-      fontFamily: FONTS.mono, fontSize: 12, maxWidth: 420,
-    }}>
-      <span className="status-dot" style={{ background: accent }}/>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          color: accent, fontSize: 10, fontWeight: 600,
-          textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2,
-        }}>{title}</div>
-        {detail && (
-          <div style={{ color: COLORS.textSecondary, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {detail}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
+// A link has to be tapped by the user. Browsers block a page from opening
+// apps on its own — deliberately — but a tap is a user gesture, so this is
+// what actually opens Netflix on the phone in their hand rather than on the
+// laptop running the backend.
 const OpenLinkCard = ({ result }) => {
   let host = result.url;
   try { host = new URL(result.url).hostname.replace(/^www\./, ""); } catch { /* keep raw */ }
-
   return (
-    <a
-      href={result.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="corners press"
-      style={{
-        display: "flex", alignItems: "center", gap: 11, marginTop: 8,
-        maxWidth: 420, padding: "12px 15px", textDecoration: "none",
-        background: COLORS.surface, border: `1px solid ${COLORS.emerald}`,
-      }}
-    >
-      <span style={{ fontSize: 15, color: COLORS.emerald }}>↗</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: FONTS.mono, fontSize: 10, fontWeight: 600, color: COLORS.emerald,
-          textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3,
-        }}>
-          {result.label || "Open"}
-        </div>
-        <div style={{
-          fontSize: 12, color: COLORS.textSecondary,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>
-          {host}
-        </div>
-        {result.note && (
-          <div style={{ fontSize: 11, color: COLORS.textTertiary, marginTop: 3 }}>
-            {result.note}
-          </div>
-        )}
-      </div>
-      <span style={{
-        fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textTertiary,
-        textTransform: "uppercase", letterSpacing: "0.08em",
-      }}>Tap</span>
+    <a href={result.url} target="_blank" rel="noopener noreferrer"
+       className="card-tap mt-2 flex w-full items-center gap-3 border-brand/40 p-3.5">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand/12 text-brand"><ExternalLink size={19} /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium">{result.label || "Open"}</span>
+        <span className="block truncate text-[13px] text-subtle">{result.note || host}</span>
+      </span>
+      <span className="text-sm font-semibold text-brand">Open</span>
     </a>
   );
 };
 
-// ── Single chat message ───────────────────────────────────────────────────
-const Message = ({ msg, actions }) => {
-  const isUser = msg.role === "user";
+const TOOL_LABEL = {
+  create_reminder: "Reminder set", list_reminders: "Checked reminders",
+  complete_reminder: "Marked done", delete_reminder: "Reminder deleted",
+  list_calendar_events: "Checked calendar", find_free_slot: "Found a free slot",
+  delete_calendar_event: "Event deleted", read_recent_emails: "Read inbox",
+  search_emails: "Searched email", search_memory: "Searched your meetings",
+  decision_history: "Checked past decisions", list_commitments: "Checked commitments",
+  meeting_timeline: "Checked meeting history", recurring_themes: "Looked for recurring topics",
+  send_email_draft: "Email sent", cancel_email_draft: "Draft discarded",
+  create_folder: "Folder created", create_project: "Project created", list_folder: "Looked in folder",
+  open_app: "Opened app", open_path: "Opened file",
+};
+
+const ActionCard = ({ action }) => {
+  const r = action.result;
+  if (action.tool === "draft_email" && r?.success && r?.preview) return <EmailPreviewCard preview={r.preview} draftId={r.draft_id} />;
+  if (action.tool === "create_calendar_event" && r?.success) return <CalendarEventCard event={r} />;
+  if (action.tool === "open_link" && r?.url) return <OpenLinkCard result={r} />;
+
+  const ok = r?.success !== false;
+  let detail;
+  if (action.tool === "create_reminder" && r?.reminder) {
+    detail = `${r.reminder.title} · ${new Date(r.reminder.datetime).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`;
+  } else if (r?.count != null) detail = `${r.count} found`;
+  else if (!ok) detail = r?.error || r?.message || "Didn't work";
+  else detail = r?.message || "";
+
   return (
-    <div className="fade-up" style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: 18 }}>
-      <div style={{ maxWidth: "78%", display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
-        <div style={{
-          fontFamily: FONTS.mono, fontSize: 10, fontWeight: 600,
-          color: isUser ? COLORS.violet : COLORS.emerald,
-          textTransform: "uppercase", letterSpacing: "0.1em",
-          marginBottom: 6, display: "flex", alignItems: "center", gap: 6,
-        }}>
-          <span className="status-dot" style={{ background: isUser ? COLORS.violet : COLORS.emerald }}/>
-          {isUser ? "You" : "Recalla"}
+    <div className="mt-1.5 inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px]">
+      {ok ? <CheckCircle2 size={15} className="shrink-0 text-brand" /> : <XCircle size={15} className="shrink-0 text-danger" />}
+      <span className="font-medium">{TOOL_LABEL[action.tool] || action.tool.replace(/_/g, " ")}</span>
+      {detail && <span className="truncate text-subtle">{detail}</span>}
+    </div>
+  );
+};
+
+const Message = ({ msg }) => {
+  if (msg.role === "user") {
+    return (
+      <div className="mb-4 flex justify-end animate-rise">
+        <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-ai px-4 py-2.5 text-[15px] leading-relaxed text-white whitespace-pre-wrap break-words">
+          {msg.content}
         </div>
-        <div style={{
-          background: isUser ? "rgba(167,139,250,0.08)" : COLORS.surface,
-          border: `1px solid ${isUser ? COLORS.borderViolet : COLORS.border}`,
-          padding: "12px 16px", color: COLORS.textPrimary,
-          fontSize: 14, lineHeight: 1.6, fontFamily: FONTS.body,
-          whiteSpace: "pre-wrap", wordBreak: "break-word",
-        }}>
-          {msg.content || "..."}
+      </div>
+    );
+  }
+  return (
+    <div className="mb-5 flex gap-2.5 animate-rise">
+      <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-ai/15 text-ai"><Sparkles size={16} /></span>
+      <div className="min-w-0 flex-1">
+        <div className={`text-[15px] leading-relaxed break-words ${msg.error ? "text-danger" : ""}`}>
+          <Markdown text={msg.content || "…"} />
         </div>
-        {!isUser && actions && actions.length > 0 && (
-          <div style={{ width: "100%" }}>
-            {actions.map((a, i) => <ActionCard key={i} action={a}/>)}
-          </div>
+        {msg.actions?.length > 0 && (
+          <div className="flex flex-col items-start">{msg.actions.map((a, i) => <ActionCard key={i} action={a} />)}</div>
         )}
       </div>
     </div>
@@ -333,40 +166,41 @@ const Message = ({ msg, actions }) => {
 };
 
 const Thinking = () => (
-  <div className="fade-up" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", marginBottom: 18 }}>
-    <span className="status-dot" style={{ background: COLORS.emerald, animationDuration: "1s" }}/>
-    <span style={{ fontFamily: FONTS.mono, fontSize: 11, color: COLORS.textSecondary, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-      Thinking...
+  <div className="mb-5 flex items-center gap-2.5" role="status">
+    <span className="grid size-8 place-items-center rounded-full bg-ai/15 text-ai"><Sparkles size={16} /></span>
+    <span className="flex gap-1" aria-label="Recalla is thinking">
+      {[0, 150, 300].map((d) => <span key={d} className="size-2 rounded-full bg-ai animate-blink" style={{ animationDelay: `${d}ms` }} />)}
     </span>
   </div>
 );
 
 const SUGGESTIONS = [
-  "Email Muzammal about the API bug",
-  "Schedule a 30-min sync with Adnan tomorrow at 3pm",
-  "What's on my calendar this week?",
-  "Remind me to submit the FYP report by Friday",
+  { group: "Your meetings", items: ["What did we decide in my last meeting?", "Which tasks were assigned to me this week?"] },
+  { group: "Calendar",      items: ["What's on my calendar tomorrow?", "Find a free 30-minute slot on Friday"] },
+  { group: "Email",         items: ["Summarise my unread emails", "Email the team the notes from today's meeting"] },
+  { group: "Reminders",     items: ["Remind me to submit the report on Friday at 5"] },
 ];
 
-export default function AskRecalla({ navigate , user }) {
+export default function AskRecalla() {
   const [messages, setMessages] = useState([]);
   const [history, setHistory]   = useState([]);
   const [input, setInput]       = useState("");
   const [loading, setLoading]   = useState(false);
-  const [agentStatus, setAgentStatus] = useState({ groq_configured: false, google_configured: false });
+  const [agentStatus, setAgentStatus] = useState({ groq_configured: true, google_configured: false });
   const [voiceError, setVoiceError] = useState(null);
-  const [sessions, setSessions]     = useState([]);
-  const [sessionId, setSessionId]   = useState(null);
-  const [panelOpen, setPanelOpen]   = useState(true);
+  const [sessions, setSessions]   = useState([]);
+  const [sessionId, setSessionId] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
   const scrollRef = useRef(null);
+  const inputRef = useRef(null);
 
   // sendMessage saves the exchange when it finishes, by which time a state
   // update would be a render behind. A ref always holds the current session.
   const sessionRef = useRef(null);
   const setSession = (id) => { sessionRef.current = id; setSessionId(id); };
 
-  const refreshSessions = () =>
-    listChats().then(d => setSessions(d.sessions || [])).catch(() => {});
+  const refreshSessions = () => listChats().then((d) => setSessions(d.sessions || [])).catch(() => {});
 
   // Speaking is the primary flow: a finished utterance is sent straight away
   // rather than dropped into the box for the user to confirm.
@@ -376,34 +210,43 @@ export default function AskRecalla({ navigate , user }) {
   });
 
   useEffect(() => {
-    getAgentStatus().then(setAgentStatus);
+    getAgentStatus().then(setAgentStatus).catch(() => {});
     refreshSessions();
-    // Pull pending question from dashboard if exists
+    // A question asked from Home arrives here.
     const pending = localStorage.getItem("recalla_pending_question");
     if (pending) {
       localStorage.removeItem("recalla_pending_question");
-      setTimeout(() => sendMessage(pending), 200);
+      setTimeout(() => sendMessage(pending), 150);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Follow the newest message — but leave the welcome screen at its top.
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (el && (messages.length || loading)) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
-  const sendMessage = async (text) => {
-    const message = (text || input).trim();
+  // Grow the box with the question, up to a few lines.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+  }, [input]);
+
+  async function sendMessage(text) {
+    const message = (text ?? input).trim();
     if (!message || loading) return;
-    setMessages(m => [...m, { role: "user", content: message }]);
+    setMessages((m) => [...m, { role: "user", content: message }]);
     setInput("");
     setLoading(true);
     try {
       const res = await agentChat(message, history);
       // ActionCard renders from { tool, result }. The backend reports every
-      // call it made in tool_calls as { name, args, result }, so map that —
-      // action_card only ever covered a couple of tool shapes.
-      const cards = (res.tool_calls || []).map(t => ({ tool: t.name, args: t.args, result: t.result }));
-      setMessages(m => [...m, { role: "assistant", content: res.response, actions: cards }]);
+      // call it made in tool_calls as { name, args, result }.
+      const cards = (res.tool_calls || []).map((t) => ({ tool: t.name, args: t.args, result: t.result }));
+      setMessages((m) => [...m, { role: "assistant", content: res.response, actions: cards }]);
       setHistory(res.history || []);
 
       // Save the pair together, so a failed reply never leaves a question
@@ -417,32 +260,30 @@ export default function AskRecalla({ navigate , user }) {
         refreshSessions();
       } catch { /* history is a convenience; never break the chat over it */ }
     } catch (err) {
-      setMessages(m => [...m, { role: "assistant", content: `Error: ${err.message}` }]);
+      setMessages((m) => [...m, { role: "assistant", error: true,
+        content: `Sorry — that didn't go through. ${err.message}` }]);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   const openSession = async (id) => {
+    setHistoryOpen(false);
     if (id === sessionRef.current) return;
     try {
       const c = await getChat(id);
-      setMessages((c.messages || []).map(m => ({
-        role: m.role, content: m.content, actions: m.actions || [],
-      })));
+      setMessages((c.messages || []).map((m) => ({ role: m.role, content: m.content, actions: m.actions || [] })));
       // Replay the text of the conversation so the agent keeps its thread —
       // tool call plumbing is not restored, only what was said.
-      setHistory((c.messages || []).map(m => ({ role: m.role, content: m.content })));
+      setHistory((c.messages || []).map((m) => ({ role: m.role, content: m.content })));
       setSession(id);
     } catch { /* a deleted session just stays unopened */ }
   };
 
-  const newSession = () => {
-    setMessages([]); setHistory([]); setSession(null);
-  };
+  const newSession = () => { setMessages([]); setHistory([]); setSession(null); setHistoryOpen(false); };
 
-  const removeSession = async (id, e) => {
-    e.stopPropagation();
+  const removeSession = async (id) => {
+    if (!(await confirm({ title: "Delete this chat?", body: "The conversation will be removed.", action: "Delete" }))) return;
     try {
       await deleteChat(id);
       if (id === sessionRef.current) newSession();
@@ -450,253 +291,131 @@ export default function AskRecalla({ navigate , user }) {
     } catch { /* ignore */ }
   };
 
-  const retitle = async (id, e) => {
-    e.stopPropagation();
-    const current = sessions.find(x => x.id === id);
+  const retitle = async (id) => {
+    const current = sessions.find((x) => x.id === id);
     const next = window.prompt("Rename this chat", current?.title || "");
-    if (next === null) return;
-    try { await renameChat(id, next); refreshSessions(); } catch { /* ignore */ }
+    if (next === null || !next.trim()) return;
+    try { await renameChat(id, next.trim()); refreshSessions(); } catch { /* ignore */ }
   };
 
-  const handleKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-  };
+  const can = agentStatus.google_configured
+    ? "Meetings, reminders, Gmail and Calendar"
+    : "Meetings and reminders · connect Google for email & calendar";
 
-  const statusLabel = agentStatus.google_configured
-    ? "Reminders · Calendar · Email"
-    : "Reminders only — Google not configured";
+  const chatList = (
+    <div className="space-y-0.5">
+      {sessions.length === 0 && <p className="px-3 py-6 text-center text-sm text-subtle">No saved chats yet.</p>}
+      {sessions.map((s) => (
+        <div key={s.id} className={`group flex items-center rounded-xl ${s.id === sessionId ? "bg-surface-3" : "hover:bg-surface-2"}`}>
+          <button onClick={() => openSession(s.id)} className="min-h-12 min-w-0 flex-1 px-3 py-2 text-left">
+            <span className="block truncate text-sm font-medium">{s.title}</span>
+            <span className="block text-xs text-subtle">{s.message_count} message{s.message_count === 1 ? "" : "s"}</span>
+          </button>
+          <button onClick={() => retitle(s.id)} aria-label="Rename chat" className="icon-btn size-9 lg:opacity-0 lg:group-hover:opacity-100"><Pencil size={15} /></button>
+          <button onClick={() => removeSession(s.id)} aria-label="Delete chat" className="icon-btn size-9 hover:text-danger lg:opacity-0 lg:group-hover:opacity-100"><Trash2 size={15} /></button>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
-    <>
-      <style>{GLOBAL_CSS}</style>
-      <style>{`
-        .chat-panel {
-          width: 244px; flex-shrink: 0; display: flex; flex-direction: column;
-          background: var(--surface); border-right: 1px solid var(--border);
-        }
-        .new-chat {
-          width: 100%; padding: 9px 12px; border-radius: 10px; cursor: pointer;
-          background: transparent; border: 1px dashed var(--border);
-          color: var(--text-secondary); font-family: ${FONTS.mono}; font-size: 11.5;
-          letter-spacing: .06em; transition: all .18s ease;
-        }
-        .new-chat:hover { border-color: var(--border-emerald); color: var(--emerald); }
-        .chat-row {
-          display: flex; align-items: center; gap: 6px;
-          padding: 9px 10px; border-radius: 9px; cursor: pointer;
-          transition: background .15s ease;
-        }
-        .chat-row:hover { background: var(--surface-raised); }
-        .chat-row.on { background: var(--surface-raised); box-shadow: inset 2px 0 0 var(--emerald); }
-        .chat-row-title {
-          font-size: 12.5px; color: var(--text-primary);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .chat-row-acts { display: flex; gap: 2px; opacity: 0; transition: opacity .15s ease; }
-        .chat-row:hover .chat-row-acts { opacity: 1; }
-        .chat-row-acts button {
-          background: none; border: none; cursor: pointer; padding: 2px 5px;
-          color: var(--text-tertiary); font-size: 13px; line-height: 1; border-radius: 5px;
-        }
-        .chat-row-acts button:hover { color: var(--text-primary); background: var(--bg); }
-        @media (max-width: 760px) { .chat-panel { display: none; } }
-      `}</style>
-      <div style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="ask" navigate={navigate} user={user}/>
+    <div className="flex h-full">
+      {/* Wide screens: past chats alongside */}
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-line bg-surface xl:flex">
+        <div className="p-3">
+          <button onClick={newSession} className="btn btn-secondary w-full"><Plus size={18} /> New chat</button>
+        </div>
+        <div className="eyebrow px-5 pb-2">Recent chats</div>
+        <div className="flex-1 overflow-y-auto px-2 pb-4">{chatList}</div>
+      </aside>
 
-        {panelOpen && (
-          <aside className="chat-panel">
-            <div style={{ padding: "16px 14px 10px" }}>
-              <button onClick={newSession} className="press new-chat">+ New chat</button>
-            </div>
-
-            <div style={{
-              fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.12em",
-              textTransform: "uppercase", color: COLORS.textTertiary,
-              padding: "2px 16px 8px",
-            }}>
-              {sessions.length ? `${sessions.length} saved` : "No saved chats"}
-            </div>
-
-            <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 16px" }}>
-              {sessions.map(sv => (
-                <div key={sv.id}
-                     onClick={() => openSession(sv.id)}
-                     className={`chat-row ${sv.id === sessionId ? "on" : ""}`}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="chat-row-title">{sv.title}</div>
-                    <div style={{
-                      fontFamily: FONTS.mono, fontSize: 9.5, color: COLORS.textTertiary,
-                      marginTop: 2,
-                    }}>
-                      {sv.message_count} message{sv.message_count === 1 ? "" : "s"}
-                    </div>
-                  </div>
-                  <div className="chat-row-acts">
-                    <button title="Rename" onClick={(e) => retitle(sv.id, e)}>✎</button>
-                    <button title="Delete" onClick={(e) => removeSession(sv.id, e)}>×</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
-        )}
-
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
-          <header style={{
-            padding: "18px 28px", borderBottom: `1px solid ${COLORS.border}`,
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-          }}>
-            <div>
-              <div style={{ fontFamily: FONTS.heading, fontSize: 26, lineHeight: 1, textTransform: "uppercase", letterSpacing: "0.02em" }}>
-                Ask <span style={{ color: COLORS.emerald }}>Recalla</span>
-              </div>
-              <div style={{
-                fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-                marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em",
-                display: "flex", alignItems: "center", gap: 6,
-              }}>
-                <span className="status-dot" style={{ background: agentStatus.groq_configured ? COLORS.emerald : COLORS.red }}/>
-                {statusLabel}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
-              onClick={() => setPanelOpen(o => !o)}
-              title={panelOpen ? "Hide chat history" : "Show chat history"}
-              style={{
-                background: "transparent", border: `1px solid ${COLORS.border}`,
-                color: COLORS.textSecondary, padding: "6px 12px",
-                fontFamily: FONTS.mono, fontSize: 11,
-                cursor: "pointer", borderRadius: 999,
-              }}
-            >
-              {panelOpen ? "‹ History" : "History ›"}
+      <div className="min-w-0 flex-1">
+        <Screen
+          scroll={false}
+          title="Ask Recalla"
+          subtitle={agentStatus.groq_configured ? can : "AI is not configured on the server"}
+          actions={<>
+            <button className="icon-btn xl:hidden" onClick={() => setHistoryOpen(true)} aria-label="Past chats">
+              <MessagesSquare size={21} />
             </button>
             {messages.length > 0 && (
-              <button
-                onClick={newSession}
-                style={{
-                  background: "transparent", border: `1px solid ${COLORS.border}`,
-                  color: COLORS.textSecondary, padding: "6px 14px",
-                  fontFamily: FONTS.mono, fontSize: 11,
-                  textTransform: "uppercase", letterSpacing: "0.1em",
-                  cursor: "pointer", borderRadius: 999, transition: "all 0.2s",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = COLORS.emerald; e.currentTarget.style.color = COLORS.emerald; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.color = COLORS.textSecondary; }}
-              >
-                New
-              </button>
+              <button className="icon-btn" onClick={newSession} aria-label="New chat"><Plus size={22} /></button>
             )}
-            </div>
-          </header>
-
-          <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "32px 40px" }}>
-            <div style={{ maxWidth: 760, width: "100%", margin: "0 auto" }}>
-              {messages.length === 0 && (
-                <div style={{ textAlign: "center", padding: "60px 20px" }} className="fade-up">
-                  <div style={{
-                    fontFamily: FONTS.heading, fontSize: 52, lineHeight: 1.05,
-                    textTransform: "uppercase", letterSpacing: "0.01em", marginBottom: 14,
-                  }}>
-                    What can I<br/><span style={{
-                      background: `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})`,
-                      WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
-                    }}>do for you?</span>
+          </>}
+        >
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className="mx-auto w-full max-w-3xl px-4 pt-5 pb-4 sm:px-6">
+              {messages.length === 0 ? (
+                <div className="animate-rise">
+                  <div className="mb-6 text-center">
+                    <span className="mx-auto mb-3 grid size-14 place-items-center rounded-2xl bg-ai/15 text-ai"><Sparkles size={26} /></span>
+                    <h2 className="text-2xl font-bold tracking-tight">What can I help with?</h2>
+                    <p className="mx-auto mt-1.5 max-w-md text-[15px] leading-relaxed text-muted">
+                      Ask about anything said in your meetings, or have me handle email,
+                      calendar and reminders. I always show you an email before it's sent.
+                    </p>
                   </div>
-                  <div style={{ fontSize: 14, color: COLORS.textSecondary, maxWidth: 480, margin: "0 auto 36px", lineHeight: 1.6 }}>
-                    Send emails, schedule meetings, set reminders. I'll always show a preview before sending email.
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 600, margin: "0 auto" }}>
-                    {SUGGESTIONS.map((s, i) => (
-                      <button
-                        key={i} onClick={() => sendMessage(s)}
-                        style={{
-                          background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                          color: COLORS.textPrimary, padding: "10px 16px",
-                          fontFamily: FONTS.body, fontSize: 12,
-                          cursor: "pointer", borderRadius: 999, transition: "all 0.2s",
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = COLORS.borderEmerald; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = COLORS.border; }}
-                      >
-                        {s}
-                      </button>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {SUGGESTIONS.map((g) => (
+                      <div key={g.group}>
+                        <div className="eyebrow mb-2">{g.group}</div>
+                        <div className="space-y-2">
+                          {g.items.map((s) => (
+                            <button key={s} onClick={() => sendMessage(s)}
+                                    className="card-tap w-full px-3.5 py-3 text-left text-[15px]">{s}</button>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
-              )}
-              {messages.map((m, i) => <Message key={i} msg={m} actions={m.actions}/>)}
-              {loading && <Thinking/>}
+              ) : messages.map((m, i) => <Message key={i} msg={m} />)}
+              {loading && <Thinking />}
             </div>
           </div>
 
-          <div style={{ padding: "20px 40px 28px", borderTop: `1px solid ${COLORS.border}`, background: COLORS.bg }}>
-            <div className="corners" style={{
-              maxWidth: 760, margin: "0 auto",
-              background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-              padding: "4px 4px 4px 16px",
-              display: "flex", alignItems: "center", gap: 8,
-            }}>
-              <input
-                type="text" value={input}
-                onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
-                placeholder={voice.listening ? "Listening…" : "Ask Recalla, or tap the mic and speak"}
-                disabled={loading || voice.listening}
-                style={{
-                  flex: 1, background: "transparent", border: "none", outline: "none",
-                  color: COLORS.textPrimary, fontFamily: FONTS.body, fontSize: 14, padding: "12px 0",
-                }}
-              />
-
-              <MicButton
-                supported={voice.supported}
-                listening={voice.listening}
-                transcribing={voice.transcribing}
-                level={voice.level}
-                onClick={voice.toggle}
-                size={38}
-              />
-              <button
-                onClick={() => sendMessage()}
-                disabled={loading || !input.trim()}
-                style={{
-                  background: input.trim() && !loading
-                    ? `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})`
-                    : COLORS.surfaceRaised,
-                  color: input.trim() && !loading ? COLORS.onAccent : COLORS.textTertiary,
-                  border: "none", padding: "10px 22px",
-                  fontFamily: FONTS.mono, fontSize: 12, fontWeight: 600,
-                  textTransform: "uppercase", letterSpacing: "0.1em",
-                  cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
-                Send
+          {/* Composer: sits above the phone tab bar */}
+          <div className="border-t border-line bg-bg/95 px-3 pt-2.5 pb-[calc(84px+env(safe-area-inset-bottom))] backdrop-blur lg:pb-4">
+            <form className="mx-auto flex max-w-3xl items-end gap-2" onSubmit={(e) => { e.preventDefault(); sendMessage(); }}>
+              <div className="flex min-w-0 flex-1 items-end rounded-3xl border border-line bg-surface py-1 pr-1 pl-4 focus-within:border-ai">
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Enter sends on a keyboard; on a phone the return key adds a line.
+                    if (e.key === "Enter" && !e.shiftKey && !("ontouchstart" in window)) { e.preventDefault(); sendMessage(); }
+                  }}
+                  placeholder={voice.listening ? "Listening…" : "Message Recalla"}
+                  disabled={voice.listening}
+                  aria-label="Message Recalla"
+                  className="max-h-36 min-h-10 min-w-0 flex-1 resize-none bg-transparent py-2 text-base leading-snug outline-none placeholder:text-subtle"
+                />
+                <MicButton supported={voice.supported} listening={voice.listening} transcribing={voice.transcribing}
+                           level={voice.level} onClick={voice.toggle} size={40} />
+              </div>
+              <button type="submit" disabled={loading || !input.trim()} aria-label="Send"
+                      className="grid size-12 shrink-0 place-items-center rounded-full bg-ai text-white transition-opacity disabled:opacity-30">
+                <ArrowUp size={22} strokeWidth={2.4} />
               </button>
-            </div>
-            <div style={{
-              maxWidth: 760, margin: "8px auto 0", minHeight: 18,
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textTertiary,
-              textTransform: "uppercase", letterSpacing: "0.1em", textAlign: "center",
-            }}>
-              {voiceError ? (
-                <span style={{ color: COLORS.amber, textTransform: "none", letterSpacing: 0, fontFamily: FONTS.body, fontSize: 12.5 }}>
-                  {voiceError}
-                </span>
-              ) : (voice.listening || voice.transcribing) ? (
-                <MicStatus listening={voice.listening} transcribing={voice.transcribing}
-                           interim={voice.interim} engine={voice.engine} />
-              ) : (
-                <span>{voice.supported ? "Press Enter to send · or tap the mic" : "Press Enter to send"}</span>
-              )}
-            </div>
+            </form>
+            {(voiceError || voice.listening || voice.transcribing) && (
+              <div className="mx-auto mt-1.5 max-w-3xl px-2">
+                {voiceError ? <p className="text-sm text-warn">{voiceError}</p>
+                  : <MicStatus listening={voice.listening} transcribing={voice.transcribing}
+                               interim={voice.interim} engine={voice.engine} />}
+              </div>
+            )}
           </div>
-        </main>
+        </Screen>
       </div>
-    </>
+
+      <Sheet open={historyOpen} onClose={() => setHistoryOpen(false)} title="Past chats" labelledBy="past-chats">
+        <button onClick={newSession} className="btn btn-secondary mb-3 w-full"><Plus size={18} /> New chat</button>
+        {chatList}
+      </Sheet>
+      {confirmDialog}
+    </div>
   );
 }

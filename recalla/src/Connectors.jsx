@@ -8,38 +8,41 @@
 // ============================================================
 
 import { useState, useEffect } from "react";
-import { COLORS, FONTS, MOTION, GLOBAL_CSS } from "./theme";
-import Sidebar from "./Sidebar";
+import {
+  Mail, MessageCircle, Send, Phone, Hash, NotebookText, Briefcase, AtSign, Camera, Monitor,
+  Plug, Check, Copy, ChevronDown, CircleAlert,
+} from "lucide-react";
 import { authFetch } from "./auth_api";
 import { API_HOST, isSameMachineAsBackend } from "./config";
+import { Screen, Banner, SkeletonList } from "./ui/kit";
 
-const STATE_META = {
-  available:      { label: "Available",   color: COLORS.emerald },
-  partial:        { label: "Permissions missing", color: COLORS.amber },
-  needs_setup:    { label: "Setup first", color: COLORS.amber   },
-  needs_provider: { label: "Needs a paid provider", color: COLORS.amber },
-  planned:        { label: "Planned",     color: COLORS.cyan    },
-  blocked:        { label: "Not possible", color: COLORS.textTertiary },
+const STATE = {
+  connected:      { label: "Connected",          cls: "bg-brand/12 text-brand" },
+  partial:        { label: "Needs attention",    cls: "bg-warn/15 text-warn" },
+  available:      { label: "Not connected",      cls: "bg-surface-3 text-muted" },
+  needs_setup:    { label: "Setup needed",       cls: "bg-warn/15 text-warn" },
+  needs_provider: { label: "Needs a paid service", cls: "bg-surface-3 text-subtle" },
+  planned:        { label: "Coming soon",        cls: "bg-info/12 text-info" },
+  blocked:        { label: "Not possible",       cls: "bg-surface-3 text-subtle" },
 };
 
 const ICONS = {
-  google:    "M",
-  desktop:   "▣",
-  whatsapp:  "W",
-  telegram:  "TG",
-  phone:     "☏",
-  slack:     "S",
-  notion:    "N",
-  linkedin:  "in",
-  x:         "X",
-  instagram: "◎",
+  google: Mail, whatsapp: MessageCircle, telegram: Send, phone: Phone, slack: Hash,
+  notion: NotebookText, linkedin: Briefcase, x: AtSign, instagram: Camera, desktop: Monitor,
 };
 
-export default function Connectors({ navigate, user }) {
+const stateOf = (c) => (c.connected && c.state === "available" ? "connected" : c.state);
+const rank = { connected: 0, partial: 1, available: 2, needs_setup: 3 };
+
+export default function Connectors() {
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [busy, setBusy]       = useState(null);
+  const [showLater, setShowLater] = useState(false);
+  // Link codes, keyed by connector. Both WhatsApp and Telegram prove identity
+  // the same way: a code minted from a signed-in session, sent from the app.
+  const [codes, setCodes] = useState({});
 
   const load = async () => {
     try {
@@ -57,18 +60,11 @@ export default function Connectors({ navigate, user }) {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
-      try {
-        const res = await authFetch(`${API_HOST}/api/connectors`);
-        if (!res.ok) throw new Error("Could not load connectors");
-        const data = await res.json();
-        if (alive) { setItems(data.connectors || []); setError(null); }
-      } catch (e) {
-        if (alive) setError(e.message);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
+    authFetch(`${API_HOST}/api/connectors`)
+      .then((res) => { if (!res.ok) throw new Error("Could not load connectors"); return res.json(); })
+      .then((data) => { if (alive) { setItems(data.connectors || []); setError(null); } })
+      .catch((e) => alive && setError(e.message))
+      .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, []);
 
@@ -81,17 +77,13 @@ export default function Connectors({ navigate, user }) {
       // Consent opens in a popup; refresh status when it closes.
       const w = window.open(data.url, "recalla-google", "width=520,height=640");
       const poll = setInterval(() => {
-        if (w?.closed) { clearInterval(poll); load(); setBusy(null); }
+        if (!w || w.closed) { clearInterval(poll); load(); setBusy(null); }
       }, 800);
     } catch (e) {
       setError(e.message);
       setBusy(null);
     }
   };
-
-  // Link codes, keyed by connector. Both WhatsApp and Telegram prove identity
-  // the same way: a code minted from a signed-in session, sent from the app.
-  const [codes, setCodes] = useState({});
 
   const linkByCode = (id) => async () => {
     setBusy(id);
@@ -119,226 +111,150 @@ export default function Connectors({ navigate, user }) {
     }
   };
 
-  const cloud  = items.filter((c) => c.scope === "cloud");
-  const device = items.filter((c) => c.scope === "device");
   const onHost = isSameMachineAsBackend();
+  const cloud = items.filter((c) => c.scope === "cloud");
+  const usable = cloud.filter((c) => stateOf(c) in rank).sort((a, b) => rank[stateOf(a)] - rank[stateOf(b)]);
+  const later  = cloud.filter((c) => !(stateOf(c) in rank));
+  const device = items.filter((c) => c.scope === "device");
+  const connectedCount = items.filter((c) => stateOf(c) === "connected").length;
+
+  const handlers = (c) => ({
+    onConnect: c.id === "google" ? connectGoogle
+      : (c.id === "whatsapp" || c.id === "telegram") ? linkByCode(c.id) : null,
+    onDisconnect: () => disconnect(c.id),
+  });
 
   return (
-    <>
-      <style>{GLOBAL_CSS}</style>
-      <style>{`
-        .conn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-        @media (max-width: 700px) { .conn-grid { grid-template-columns: 1fr; } }
-        .conn-card {
-          background: var(--surface); border: 1px solid var(--border);
-          border-radius: 16px; padding: 18px;
-          display: flex; flex-direction: column; gap: 11;
-          transition: border-color ${MOTION.base} ease, transform ${MOTION.base} ${MOTION.ease};
-        }
-        .conn-card.live:hover { border-color: var(--border-emerald); transform: translate3d(0,-2px,0); }
-        .conn-card.off { opacity: .72; }
-      `}</style>
+    <Screen title="Connectors"
+            subtitle={loading ? "Loading…" : `${connectedCount} connected · let Recalla act for you`}
+            width="max-w-4xl">
+      {error && <Banner className="mb-4" onClose={() => setError(null)}>{error}</Banner>}
 
-      <div className="themed" style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="connectors" navigate={navigate} user={user} />
+      <p className="mb-4 text-[15px] leading-relaxed text-muted">
+        Connect a service and Recalla can use it when you ask — read and send email,
+        add calendar events, or answer you on WhatsApp.
+      </p>
 
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <header style={{ padding: "18px 28px", borderBottom: `1px solid ${COLORS.border}` }}>
-            <div style={{
-              fontFamily: FONTS.heading, fontSize: 26, lineHeight: 1,
-              textTransform: "uppercase", letterSpacing: "0.02em", color: COLORS.textPrimary,
-            }}>Connectors</div>
-            <div style={{
-              fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-              marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em",
-            }}>
-              {loading
-                ? "Loading…"
-                : `${items.filter(c => c.connected && c.state !== "partial").length} connected`}
-            </div>
-          </header>
-
-          <div style={{ flex: 1, overflowY: "auto", padding: "26px 28px 60px" }}>
-            <div style={{ maxWidth: 900, margin: "0 auto" }}>
-
-              {error && (
-                <div style={{
-                  padding: "11px 15px", borderRadius: 10, marginBottom: 20,
-                  background: COLORS.surface, border: `1px solid ${COLORS.red}`,
-                  color: COLORS.red, fontSize: 13,
-                }}>{error}</div>
-              )}
-
-              <SectionTitle
-                title="Services"
-                hint="These run on the server, so they work the same on your laptop, phone or tablet."
-              />
-              <div className="conn-grid" style={{ marginBottom: 34 }}>
-                {loading
-                  ? [0, 1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 150, borderRadius: 16 }} />)
-                  : cloud.map((c) => (
-                      <Card key={c.id} c={c} busy={busy === c.id}
-                            onConnect={c.id === "google" ? connectGoogle
-                                     : (c.id === "whatsapp" || c.id === "telegram")
-                                       ? linkByCode(c.id) : null}
-                            onDisconnect={() => disconnect(c.id)}
-                            code={codes[c.id] || null} />
-                    ))}
-              </div>
-
-              <SectionTitle
-                title="This device"
-                hint={
-                  onHost
-                    ? "Actions that happen on the computer running Recalla."
-                    : "You're viewing Recalla from another device. These actions still run on the computer hosting it, not on this one."
-                }
-              />
-              <div className="conn-grid">
-                {device.map((c) => (
-                  <Card key={c.id} c={c} busy={false} remote={!onHost} />
-                ))}
-              </div>
-
-            </div>
+      {loading ? <SkeletonList count={3} h="h-32" /> : (
+        <>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {usable.map((c) => (
+              <Card key={c.id} c={c} busy={busy === c.id} code={codes[c.id] || null} {...handlers(c)} />
+            ))}
           </div>
-        </main>
-      </div>
-    </>
-  );
-}
 
-function SectionTitle({ title, hint }) {
-  return (
-    <div style={{ marginBottom: 13 }}>
-      <div style={{
-        fontFamily: FONTS.heading, fontSize: 20, textTransform: "uppercase",
-        letterSpacing: "0.02em", color: COLORS.textPrimary, marginBottom: 5,
-      }}>{title}</div>
-      <div style={{ fontSize: 13, color: COLORS.textSecondary, lineHeight: 1.55, maxWidth: 620 }}>
-        {hint}
-      </div>
-    </div>
+          {device.length > 0 && (
+            <section className="mt-8">
+              <h2 className="text-[15px] font-semibold">On the computer running Recalla</h2>
+              <p className="mt-1 mb-3 text-sm leading-relaxed text-subtle">
+                {onHost
+                  ? "Actions that happen on this computer."
+                  : "You're on another device — these still run on the computer hosting Recalla, not on this one."}
+              </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {device.map((c) => <Card key={c.id} c={c} busy={false} remote={!onHost} />)}
+              </div>
+            </section>
+          )}
+
+          {later.length > 0 && (
+            <section className="mt-8">
+              <button onClick={() => setShowLater((s) => !s)} aria-expanded={showLater}
+                      className="flex min-h-11 w-full items-center gap-2 text-left">
+                <span className="flex-1">
+                  <span className="block text-[15px] font-semibold">Not available yet</span>
+                  <span className="block text-sm text-subtle">{later.map((c) => c.name).join(", ")}</span>
+                </span>
+                <ChevronDown size={20} className={`text-subtle transition-transform ${showLater ? "rotate-180" : ""}`} />
+              </button>
+              {showLater && (
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 animate-fade-in">
+                  {later.map((c) => <Card key={c.id} c={c} busy={false} />)}
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      )}
+    </Screen>
   );
 }
 
 function Card({ c, busy, onConnect, onDisconnect, remote, code }) {
-  const meta = STATE_META[c.state] || STATE_META.planned;
-  // "partial" is a working integration missing a permission, so it keeps the
-  // full-colour card and its buttons — it just cannot claim to be connected.
-  const partial = c.state === "partial";
-  const live = c.state === "available" || partial;
+  const st = stateOf(c);
+  const meta = STATE[st] || STATE.planned;
+  const Icon = ICONS[c.id] || Plug;
+  const live = st === "available" || st === "connected" || st === "partial";
+  const [copied, setCopied] = useState(false);
+
+  const command = code?.code ? (c.id === "telegram" ? `/link ${code.code}` : `link ${code.code}`) : "";
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(command); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch { /* clipboard blocked — the code is on screen anyway */ }
+  };
 
   return (
-    <div className={`conn-card ${live ? "live" : "off"}`}>
-      <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 4 }}>
-        <div style={{
-          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-          display: "grid", placeItems: "center",
-          background: COLORS.surfaceRaised,
-          fontFamily: FONTS.mono, fontSize: 13, fontWeight: 600,
-          color: live ? COLORS.emerald : COLORS.textTertiary,
-        }}>{ICONS[c.id] || "•"}</div>
-
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 500, color: COLORS.textPrimary }}>{c.name}</div>
-          <div style={{
-            fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.1em",
-            textTransform: "uppercase", color: meta.color, marginTop: 2,
-          }}>
-            {c.connected && live && !partial ? "Connected" : meta.label}
-          </div>
+    <div className={`card flex flex-col p-4 ${live ? "" : "opacity-75"}`}>
+      <div className="flex items-start gap-3">
+        <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${live ? "bg-brand/12 text-brand" : "bg-surface-3 text-subtle"}`}>
+          <Icon size={21} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold">{c.name}</div>
+          <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${meta.cls}`}>
+            {st === "connected" && <Check size={12} strokeWidth={3} />}
+            {st === "partial" && <CircleAlert size={12} />}
+            {meta.label}
+          </span>
         </div>
-
-        {c.connected && live && (
-          <span className="status-dot"
-                style={{ background: partial ? COLORS.amber : COLORS.emerald }} />
-        )}
       </div>
 
-      <div style={{ fontSize: 13, color: COLORS.textSecondary, lineHeight: 1.55, marginBottom: 4 }}>
-        {c.blurb}
-      </div>
+      <p className="mt-3 text-[15px] leading-relaxed text-muted">{c.blurb}</p>
+      {c.account && <p className="mt-1 truncate text-sm text-subtle">{c.account}</p>}
 
-      {c.account && (
-        <div style={{ fontFamily: FONTS.mono, fontSize: 10.5, color: COLORS.textTertiary }}>
-          {c.account}
-        </div>
-      )}
-
-      {c.actions && live && !partial && (
-        <ul style={{ margin: "2px 0 0", padding: 0, listStyle: "none" }}>
-          {c.actions.slice(0, 4).map((a) => (
-            <li key={a} style={{
-              fontSize: 12.5, color: COLORS.textTertiary, lineHeight: 1.7,
-              display: "flex", gap: 7,
-            }}>
-              <span style={{ color: COLORS.emerald }}>·</span>{a}
-            </li>
-          ))}
+      {c.actions && st === "connected" && (
+        <ul className="mt-2.5 flex flex-wrap gap-1.5">
+          {c.actions.slice(0, 4).map((a) => <li key={a} className="tag">{a}</li>)}
         </ul>
       )}
 
-      {c.reason && (
-        <div style={{
-          fontSize: 12, color: COLORS.textTertiary, lineHeight: 1.55,
-          background: COLORS.bg, border: `1px solid ${COLORS.border}`,
-          borderRadius: 9, padding: "9px 11px", marginTop: 4,
-        }}>{c.reason}</div>
-      )}
+      {c.reason && <p className="mt-3 rounded-xl bg-surface-3/60 p-3 text-sm leading-relaxed text-muted">{c.reason}</p>}
 
-      {code?.code && (
-        <div style={{
-          marginTop: 4, padding: "11px 13px", borderRadius: 10,
-          background: COLORS.bg, border: `1px solid ${COLORS.emerald}`,
-        }}>
-          <div style={{
-            fontFamily: FONTS.mono, fontSize: 9, letterSpacing: "0.12em",
-            textTransform: "uppercase", color: COLORS.textTertiary, marginBottom: 5,
-          }}>Send this from your phone</div>
-          <div style={{
-            fontFamily: FONTS.mono, fontSize: 17, color: COLORS.emerald,
-            letterSpacing: "0.06em",
-          }}>{c.id === "telegram" ? `/link ${code.code}` : `link ${code.code}`}</div>
-          <div style={{ fontSize: 11.5, color: COLORS.textTertiary, marginTop: 6, lineHeight: 1.5 }}>
-            {code.instructions || "Send this from the app. Expires in 10 minutes."}
+      {command && (
+        <div className="mt-3 rounded-xl border border-brand/40 bg-brand/8 p-3">
+          <div className="text-xs font-semibold text-subtle">Send this message from your phone</div>
+          <div className="mt-1 flex items-center gap-2">
+            <code className="flex-1 font-mono text-lg font-medium text-brand">{command}</code>
+            <button onClick={copy} className="btn btn-secondary btn-sm" aria-label="Copy the code">
+              {copied ? <Check size={16} /> : <Copy size={16} />}{copied ? "Copied" : "Copy"}
+            </button>
           </div>
+          <p className="mt-1.5 text-[13px] leading-snug text-subtle">
+            {code.instructions || "Send it from the app you're linking. The code expires in 10 minutes."}
+          </p>
         </div>
       )}
 
-      {remote && (
-        <div style={{
-          fontSize: 12, color: COLORS.amber, lineHeight: 1.5, marginTop: 4,
-        }}>
-          Runs on the host computer, not the device you're holding.
+      {remote && <p className="mt-3 text-sm text-warn">Runs on the host computer, not the device in your hand.</p>}
+
+      {live && (onConnect || onDisconnect) && (
+        <div className="mt-auto flex gap-2 pt-4">
+          {onConnect && st !== "connected" && (
+            <button onClick={onConnect} disabled={busy} className="btn btn-primary flex-1">
+              {busy ? "Working…"
+                : st === "partial" ? "Reconnect"
+                : c.id === "whatsapp" ? "Link my number"
+                : c.id === "telegram" ? "Link Telegram"
+                : "Connect"}
+            </button>
+          )}
+          {st === "connected" && onDisconnect && (
+            <button onClick={onDisconnect} disabled={busy} className="btn btn-secondary flex-1">
+              {busy ? "Working…" : "Disconnect"}
+            </button>
+          )}
         </div>
       )}
-
-      <div style={{ marginTop: "auto", paddingTop: 12 }}>
-        {live && onConnect && (!c.connected || partial) && (
-          <button onClick={onConnect} disabled={busy} className="press" style={btn(true)}>
-            {busy ? "Working…"
-              : partial ? "Reconnect"
-              : c.id === "whatsapp" ? "Link my number"
-              : c.id === "telegram" ? "Link Telegram"
-              : "Connect"}
-          </button>
-        )}
-        {live && c.connected && !partial && onDisconnect && (
-          <button onClick={onDisconnect} disabled={busy} className="press" style={btn(false)}>
-            {busy ? "…" : "Disconnect"}
-          </button>
-        )}
-      </div>
     </div>
   );
 }
-
-const btn = (primary) => ({
-  background: primary ? `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})` : "transparent",
-  color: primary ? COLORS.onAccent : COLORS.textSecondary,
-  border: primary ? "none" : `1px solid ${COLORS.border}`,
-  padding: "8px 16px", borderRadius: 999,
-  fontFamily: FONTS.mono, fontSize: 10.5, fontWeight: 600,
-  textTransform: "uppercase", letterSpacing: "0.1em", cursor: "pointer",
-});

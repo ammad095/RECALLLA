@@ -1,26 +1,28 @@
 // ============================================================
 // FILE PATH:  recalla/src/MeetingDetail.jsx
-// PURPOSE:    Single-meeting view. Auto-generates AI summary on load.
-//             Real summary from Groq, simple tab switcher.
+// PURPOSE:    One meeting: summary, what was decided and assigned,
+//             the full transcript and who spoke how much.
 // ============================================================
 
 import { useState, useEffect } from "react";
-import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
-import Sidebar from "./Sidebar";
+import {
+  Clock, Users, FileText, Sparkles, RefreshCw, CheckCircle2, ListTodo, Search, Loader2, AudioLines,
+} from "lucide-react";
 import { summarizeTranscript } from "./agent_api";
 import { getRefineStatus } from "./api";
 import { getMeeting, updateMeeting, getExtracted, extractMeeting, getSettings } from "./data_api";
-import { fmtWhen, fmtDuration } from "./format";
+import { fmtWhen, fmtDuration, fmtClock } from "./format";
+import { Screen, Tabs, EmptyState, Banner, SkeletonList } from "./ui/kit";
 
-const SPEAKER_COLORS = [COLORS.emerald, COLORS.violet, COLORS.cyan, COLORS.amber];
+// Speaker colours, as class pairs so Tailwind can see them.
+const SPEAKER = [
+  { dot: "bg-brand", text: "text-brand", soft: "bg-brand/12" },
+  { dot: "bg-ai",    text: "text-ai",    soft: "bg-ai/12" },
+  { dot: "bg-info",  text: "text-info",  soft: "bg-info/12" },
+  { dot: "bg-warn",  text: "text-warn",  soft: "bg-warn/12" },
+];
 
-const fmtTime = (sec) => {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`;
-};
-
-export default function MeetingDetail({ navigate, meeting , user }) {
+export default function MeetingDetail({ navigate, meeting }) {
   const [tab, setTab]                 = useState("summary");
   const [summary, setSummary]         = useState(null);
   const [tasks, setTasks]             = useState([]);
@@ -32,27 +34,28 @@ export default function MeetingDetail({ navigate, meeting , user }) {
   // "Write a summary after each meeting" is a real setting; honour it for the
   // automatic pass. The Generate button always works regardless.
   const [autoSummary, setAutoSummary] = useState(true);
-  useEffect(() => {
-    getSettings().then(s => setAutoSummary(s.auto_summary ?? true)).catch(() => {});
-  }, []);
   const [keyPoints, setKeyPoints]     = useState([]);
   const [generating, setGenerating]   = useState(false);
   const [genError, setGenError]       = useState(null);
+  const [loadError, setLoadError]     = useState(null);
+  const [query, setQuery]             = useState("");
 
   // Live recordings are transcribed with the fast model while the meeting runs;
   // a slower, more accurate pass then re-runs server-side. Poll for it and swap
   // the transcript in when it lands.
   const [segments, setSegments]       = useState(meeting?.transcript || []);
   const [refine, setRefine]           = useState(null);
-  const [full, setFull]               = useState(meeting);
+  const [full, setFull]               = useState(meeting?.transcript ? meeting : null);
 
-  // Prefer the freshly-loaded record; fall back to whatever was passed in.
-  const M = full || meeting;
-
-  // The meetings list only passes an id, so fetch the rest from the database.
+  const M = full;
   const meetingId = meeting?.id;
   const hasTranscript = Boolean(meeting?.transcript);
 
+  useEffect(() => {
+    getSettings().then((s) => setAutoSummary(s.auto_summary ?? true)).catch(() => {});
+  }, []);
+
+  // The meetings list only passes an id, so fetch the rest from the database.
   useEffect(() => {
     if (!meetingId || hasTranscript) return;
     let alive = true;
@@ -75,17 +78,15 @@ export default function MeetingDetail({ navigate, meeting , user }) {
         setSegments(m.segments || []);
         if (m.summary) { setSummary(m.summary); setKeyPoints(m.key_points || []); }
       })
-      .catch(() => {});
+      .catch((e) => alive && setLoadError(e.message));
     return () => { alive = false; };
   }, [meetingId, hasTranscript]);
 
   useEffect(() => {
-    const sid = meeting?.sessionId;
-    if (!sid || !meeting?.liveMode) return;
-
+    const sid = M?.sessionId;
+    if (!sid || !M?.liveMode) return;
     let alive = true;
     let tries = 0;
-
     const tick = async () => {
       if (!alive || tries++ > 240) return;        // stop after ~20 min
       try {
@@ -94,20 +95,15 @@ export default function MeetingDetail({ navigate, meeting , user }) {
         setRefine(r.refine);
         if (r.refine?.status === "done" && r.segments?.length) {
           setSegments(r.segments);
-          if (meeting?.id) {
-            updateMeeting(meeting.id, {
-              segments: r.segments, transcript_model: "small",
-            }).catch(() => {});
-          }
+          if (M?.id) updateMeeting(M.id, { segments: r.segments, transcript_model: "small" }).catch(() => {});
         } else if (r.refine?.status === "running" || r.refine?.status === "idle") {
           setTimeout(tick, 5000);
         }
       } catch { /* session expired or backend restarted */ }
     };
-
     tick();
     return () => { alive = false; };
-  }, [meeting?.sessionId, meeting?.liveMode]);
+  }, [M?.sessionId, M?.liveMode, M?.id]);
 
   const generateSummary = async () => {
     if (!M?.fullText) return;
@@ -118,13 +114,9 @@ export default function MeetingDetail({ navigate, meeting , user }) {
       setSummary(res.summary);
       setKeyPoints(res.key_points || []);
       setVerbatim(Boolean(res.verbatim));
-
       // Store it, so reopening the meeting shows the summary instantly rather
       // than paying for the same generation again.
-      if (M.id) {
-        updateMeeting(M.id, { summary: res.summary, key_points: res.key_points || [] })
-          .catch(() => {});
-      }
+      if (M.id) updateMeeting(M.id, { summary: res.summary, key_points: res.key_points || [] }).catch(() => {});
     } catch (e) {
       setGenError(e.message);
     } finally {
@@ -152,414 +144,254 @@ export default function MeetingDetail({ navigate, meeting , user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [M?.id, M?.fullText]);
 
-  // Generate the summary once the meeting has actually loaded.
-  //
-  // The meeting arrives from a fetch, so on the first render M is still null
-  // and there is nothing to summarise. With an empty dependency list this
-  // effect bailed on that first pass and never ran again — which is why no
-  // summary ever appeared. Depend on the meeting id instead.
+  // Generate the summary once the meeting has actually loaded — it arrives
+  // from a fetch, so the first render has nothing to summarise.
   useEffect(() => {
     if (!M?.fullText) return;
     if (M.aiSummary) { setSummary(M.aiSummary); setKeyPoints(M.keyPoints || []); return; }
     if (!autoSummary) return;
     generateSummary();
-    // autoSummary is a dependency because settings arrive from their own
-    // fetch — without it, a meeting that loads first would never summarise.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [M?.id, M?.fullText, autoSummary]);
 
+  const back = () => navigate("back", "meetings");
 
-  if (!M) {
+  if (!meeting) {
     return (
-      <>
-        <style>{GLOBAL_CSS}</style>
-        <div style={{ display: "flex", height: "100vh", background: COLORS.bg }}>
-          <Sidebar active="meetings" navigate={navigate} user={user}/>
-          <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontFamily: FONTS.heading, fontSize: 38, marginBottom: 12 }}>No meeting selected</div>
-              <button
-                onClick={() => navigate("meetings")}
-                style={{
-                  background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                  color: COLORS.textPrimary, padding: "10px 22px",
-                  fontFamily: FONTS.mono, fontSize: 12,
-                  textTransform: "uppercase", letterSpacing: "0.1em",
-                  cursor: "pointer", borderRadius: 999,
-                }}
-              >
-                Back to Meetings
-              </button>
-            </div>
-          </main>
-        </div>
-      </>
+      <Screen title="Meeting" onBack={back}>
+        <EmptyState icon={AudioLines} tone="muted" title="No meeting selected"
+          action={<button className="btn btn-secondary" onClick={() => navigate("meetings")}>See all meetings</button>} />
+      </Screen>
     );
   }
 
-  // Build speaker list from segments
-  const speakers = [...new Set((segments || []).map(s => s.speaker || "Speaker 1"))];
-  const speakerStats = {};
-  (segments || []).forEach(seg => {
+  if (!M) {
+    return (
+      <Screen title={meeting.title || "Meeting"} onBack={back}>
+        {loadError ? <Banner>Couldn't open this meeting: {loadError}</Banner> : (
+          <>
+            <div className="skeleton mb-4 h-10 w-2/3" />
+            <SkeletonList count={3} h="h-28" />
+          </>
+        )}
+      </Screen>
+    );
+  }
+
+  // Speaker list and talk time, from the segments.
+  const speakers = [...new Set((segments || []).map((s) => s.speaker || "Speaker 1"))];
+  const stats = {};
+  (segments || []).forEach((seg) => {
     const sp = seg.speaker || "Speaker 1";
-    if (!speakerStats[sp]) speakerStats[sp] = { words: 0, duration: 0 };
-    speakerStats[sp].words    += (seg.text || "").split(/\s+/).filter(Boolean).length;
-    speakerStats[sp].duration += (seg.end - seg.start);
+    stats[sp] ||= { words: 0, duration: 0 };
+    stats[sp].words += (seg.text || "").split(/\s+/).filter(Boolean).length;
+    stats[sp].duration += Math.max(0, (seg.end || 0) - (seg.start || 0));
   });
-  const totalDur = Object.values(speakerStats).reduce((a, s) => a + s.duration, 0);
+  const totalDur = Object.values(stats).reduce((a, s) => a + s.duration, 0);
+  const color = (sp) => SPEAKER[Math.max(0, speakers.indexOf(sp)) % SPEAKER.length];
+
+  const q = query.trim().toLowerCase();
+  const shown = q ? (segments || []).filter((s) => (s.text || "").toLowerCase().includes(q)) : (segments || []);
 
   return (
-    <>
-      <style>{GLOBAL_CSS}</style>
-      <div style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="meetings" navigate={navigate} user={user}/>
+    <Screen title={M.title || "Untitled meeting"} subtitle={M.date} onBack={back}>
+      {/* ── Facts ─────────────────────────────────────────────────────── */}
+      <div className="mb-4 flex flex-wrap gap-2 text-[13px]">
+        <Fact Icon={Clock}>{M.duration}</Fact>
+        <Fact Icon={FileText}>{(M.wordCount || 0).toLocaleString()} words</Fact>
+        <Fact Icon={Users}>{speakers.length} speaker{speakers.length === 1 ? "" : "s"}</Fact>
+        {(M.tags || M.tagging?.auto_tags || []).slice(0, 3).map((t) => <span key={t} className="tag py-1">{t}</span>)}
+      </div>
 
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {/* Header */}
-          <header style={{
-            padding: "18px 28px", borderBottom: `1px solid ${COLORS.border}`,
-            display: "flex", alignItems: "center", gap: 16,
-          }}>
-            <button
-              onClick={() => navigate("meetings")}
-              style={{
-                background: "transparent", border: `1px solid ${COLORS.border}`,
-                color: COLORS.textSecondary, padding: "6px 10px",
-                cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
-                fontFamily: FONTS.mono, fontSize: 11, borderRadius: 999,
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round">
-                <polyline points="15 18 9 12 15 6"/>
-              </svg>
-              BACK
-            </button>
+      <div className="sticky top-0 z-10 -mx-4 mb-5 bg-bg/95 px-2 backdrop-blur sm:mx-0 sm:px-0">
+        <Tabs value={tab} onChange={setTab} options={[
+          { value: "summary", label: "Summary" },
+          { value: "actions", label: "Tasks & decisions", count: tasks.length + decisions.length },
+          { value: "transcript", label: "Transcript" },
+          { value: "speakers", label: "Speakers" },
+        ]} />
+      </div>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontFamily: FONTS.heading, fontSize: 24, lineHeight: 1.1,
-                textTransform: "uppercase", letterSpacing: "0.01em",
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>
-                {M.title || "Untitled Meeting"}
-              </div>
-              <div style={{
-                fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-                marginTop: 4, textTransform: "uppercase", letterSpacing: "0.1em",
-              }}>
-                {M.date} · {M.duration} · {M.wordCount} words · {speakers.length} speaker{speakers.length !== 1 ? "s" : ""}
-              </div>
+      {/* ── Summary ───────────────────────────────────────────────────── */}
+      {tab === "summary" && (
+        <div className="animate-rise">
+          <section className="card p-4 sm:p-5">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-brand">
+              {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {generating ? "Writing the summary…" : verbatim ? "Short meeting — shown in full" : "Summary"}
             </div>
-          </header>
+            {genError && !generating && <Banner className="mb-2">Couldn't write a summary: {genError}</Banner>}
+            {generating && !summary ? (
+              <div className="space-y-2 pt-1"><div className="skeleton h-4" /><div className="skeleton h-4 w-11/12" /><div className="skeleton h-4 w-3/4" /></div>
+            ) : summary ? (
+              <p className="text-[15px] leading-relaxed">{summary}</p>
+            ) : !genError && (
+              <div className="py-2">
+                <p className="mb-3 text-[15px] text-muted">No summary yet.</p>
+                <button className="btn btn-primary btn-sm" onClick={generateSummary} disabled={!M.fullText}>
+                  <Sparkles size={16} /> Write summary
+                </button>
+              </div>
+            )}
+          </section>
 
-          {/* Tabs */}
-          <div style={{
-            padding: "0 28px", borderBottom: `1px solid ${COLORS.border}`,
-            display: "flex", gap: 4,
-          }}>
-            {[
-              { id: "summary",    label: "Summary" },
-              { id: "actions",    label: "Tasks & Decisions" },
-              { id: "transcript", label: "Transcript" },
-              { id: "speakers",   label: "Speakers" },
-            ].map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                style={{
-                  background: "transparent", border: "none",
-                  color: tab === t.id ? COLORS.emerald : COLORS.textSecondary,
-                  padding: "14px 18px",
-                  fontFamily: FONTS.mono, fontSize: 11, fontWeight: 600,
-                  textTransform: "uppercase", letterSpacing: "0.1em",
-                  cursor: "pointer",
-                  borderBottom: `2px solid ${tab === t.id ? COLORS.emerald : "transparent"}`,
-                  transition: "all 0.2s",
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          {keyPoints.length > 0 && (
+            <section className="mt-6">
+              <h2 className="mb-3 text-[15px] font-semibold">Key points</h2>
+              <ol className="space-y-2">
+                {keyPoints.map((p, i) => (
+                  <li key={i} className="card flex gap-3 p-3.5">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ai/12 text-sm font-semibold text-ai tabular-nums">{i + 1}</span>
+                    <span className="text-[15px] leading-relaxed">{p}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
 
-          {/* Content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "28px 28px" }}>
-            <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          {summary && !generating && (
+            <button className="btn btn-ghost btn-sm mt-4 -ml-2" onClick={generateSummary}>
+              <RefreshCw size={15} /> Rewrite summary
+            </button>
+          )}
+        </div>
+      )}
 
-              {/* SUMMARY TAB */}
-              {tab === "summary" && (
-                <div className="fade-up">
-                  <div style={{
-                    fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-                    textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10,
-                    display: "flex", alignItems: "center", gap: 6,
-                  }}>
-                    <span className="status-dot" style={{ background: generating ? COLORS.amber : COLORS.emerald, animationDuration: generating ? "0.6s" : "2s" }}/>
-                    {generating ? "Writing the summary…"
-                      : verbatim ? "Short meeting — shown in full"
-                      : "Summary"}
-                  </div>
-
-                  <div className="corners" style={{
-                    background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                    padding: 24, fontSize: 15, lineHeight: 1.7, color: COLORS.textPrimary,
-                    minHeight: 100,
-                  }}>
-                    {generating && !summary && (
-                      <span style={{ color: COLORS.textSecondary, fontFamily: FONTS.mono, fontSize: 12 }}>
-                        Analyzing transcript...
-                      </span>
-                    )}
-                    {!generating && genError && (
-                      <span style={{ color: COLORS.red, fontFamily: FONTS.mono, fontSize: 13 }}>
-                        Failed: {genError}
-                      </span>
-                    )}
-                    {summary}
-                  </div>
-
-                  {keyPoints.length > 0 && (
-                    <>
-                      <div style={{
-                        fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-                        textTransform: "uppercase", letterSpacing: "0.12em",
-                        marginTop: 28, marginBottom: 10,
-                      }}>
-                        Key Points
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {keyPoints.map((p, i) => (
-                          <div key={i} className="corners corners-violet" style={{
-                            background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                            padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: 12,
-                          }}>
-                            <span style={{
-                              fontFamily: FONTS.mono, fontSize: 11, color: COLORS.violet,
-                              fontWeight: 600, lineHeight: 1.6,
-                              minWidth: 20,
-                            }}>
-                              {String(i+1).padStart(2,"0")}
-                            </span>
-                            <span style={{ fontSize: 14, lineHeight: 1.6, color: COLORS.textPrimary, flex: 1 }}>
-                              {p}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  {summary && !generating && (
-                    <button
-                      onClick={generateSummary}
-                      style={{
-                        marginTop: 18, background: "transparent",
-                        border: `1px solid ${COLORS.border}`,
-                        color: COLORS.textSecondary, padding: "8px 16px",
-                        fontFamily: FONTS.mono, fontSize: 11,
-                        textTransform: "uppercase", letterSpacing: "0.1em",
-                        cursor: "pointer", borderRadius: 999,
-                      }}
-                    >
-                      Regenerate
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* TRANSCRIPT TAB */}
-              {/* TASKS & DECISIONS TAB */}
-              {tab === "actions" && (
-                <div style={{ display: "grid", gap: 22 }}>
-                  <Extracted
-                    title="Action items"
-                    empty={extracting ? "Reading the meeting…" : "No commitments were made in this meeting."}
-                    items={tasks}
-                    render={(t, i) => (
-                      <li key={i} style={{
-                        display: "flex", gap: 11, alignItems: "flex-start",
-                        padding: "11px 13px", borderRadius: 10, marginBottom: 8,
-                        background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                      }}>
-                        <span style={{
-                          width: 6, height: 6, borderRadius: 999, marginTop: 7, flexShrink: 0,
-                          background: t.priority === "high" ? COLORS.red
-                                    : t.priority === "low" ? COLORS.textTertiary
-                                    : COLORS.amber,
-                        }} />
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ fontSize: 13.5, color: COLORS.textPrimary, lineHeight: 1.5 }}>
-                            {t.text}
-                          </div>
-                          {(t.assignee || t.due) && (
-                            <div style={{
-                              fontFamily: FONTS.mono, fontSize: 10.5, marginTop: 4,
-                              color: COLORS.textTertiary, display: "flex", gap: 12,
-                            }}>
-                              {t.assignee && <span>{t.assignee}</span>}
-                              {t.due && <span style={{ color: COLORS.amber }}>due {t.due}</span>}
-                            </div>
-                          )}
-                        </div>
-                      </li>
-                    )}
-                  />
-
-                  <Extracted
-                    title="Decisions"
-                    empty={extracting ? "…" : "No decisions were settled in this meeting."}
-                    items={decisions}
-                    render={(d, i) => (
-                      <li key={i} style={{
-                        padding: "11px 13px", borderRadius: 10, marginBottom: 8,
-                        background: COLORS.surface,
-                        border: `1px solid ${COLORS.border}`,
-                        borderLeft: `2px solid ${COLORS.emerald}`,
-                      }}>
-                        <div style={{ fontSize: 13.5, color: COLORS.textPrimary, lineHeight: 1.5 }}>
-                          {d.text}
-                        </div>
-                        {d.context && (
-                          <div style={{ fontSize: 12, color: COLORS.textTertiary, marginTop: 4, lineHeight: 1.5 }}>
-                            {d.context}
-                          </div>
-                        )}
-                      </li>
-                    )}
-                  />
-
-                  <button
-                    onClick={() => runExtract(true)}
-                    disabled={extracting}
-                    className="press"
-                    style={{
-                      alignSelf: "start", background: "transparent",
-                      border: `1px solid ${COLORS.border}`, color: COLORS.textSecondary,
-                      padding: "7px 15px", borderRadius: 999, cursor: "pointer",
-                      fontFamily: FONTS.mono, fontSize: 11,
-                      textTransform: "uppercase", letterSpacing: "0.1em",
-                    }}
-                  >
-                    {extracting ? "Reading…" : "Re-read meeting"}
-                  </button>
-                </div>
-              )}
-
-              {tab === "transcript" && (
-                <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
-                  {/* Second-pass status — only for live recordings */}
-                  {refine && refine.status !== "idle" && (
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 9,
-                      padding: "9px 13px", borderRadius: 10,
-                      background: COLORS.surface,
-                      border: `1px solid ${refine.status === "done" ? COLORS.borderEmerald : COLORS.border}`,
-                      fontFamily: FONTS.mono, fontSize: 10,
-                      letterSpacing: "0.1em", textTransform: "uppercase",
-                      color: refine.status === "done" ? COLORS.emerald : COLORS.textSecondary,
-                    }}>
-                      {refine.status === "running" && (
-                        <>
-                          <span className="status-dot" style={{ background: COLORS.amber }} />
-                          Improving accuracy in background · {refine.progress}%
-                        </>
-                      )}
-                      {refine.status === "done" && (
-                        <>
-                          <span style={{ fontSize: 12 }}>✓</span>
-                          Transcript refined for accuracy
-                        </>
-                      )}
-                      {refine.status === "error" && (
-                        <span style={{ color: COLORS.textTertiary }}>
-                          Kept the live transcript — second pass unavailable
-                        </span>
+      {/* ── Tasks & decisions ─────────────────────────────────────────── */}
+      {tab === "actions" && (
+        <div className="space-y-7 animate-rise">
+          <section>
+            <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold">
+              <ListTodo size={18} className="text-ai" /> Action items
+              {tasks.length > 0 && <span className="text-subtle">{tasks.length}</span>}
+            </h2>
+            {extracting && !tasks.length ? <SkeletonList count={2} h="h-16" /> : tasks.length === 0 ? (
+              <p className="text-[15px] text-subtle">No one committed to anything in this meeting.</p>
+            ) : (
+              <ul className="space-y-2">
+                {tasks.map((t, i) => (
+                  <li key={i} className="card flex gap-3 p-3.5">
+                    <span className={`mt-2 size-2 shrink-0 rounded-full ${t.priority === "high" ? "bg-danger" : t.priority === "low" ? "bg-subtle" : "bg-warn"}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[15px] leading-relaxed">{t.text}</p>
+                      {(t.assignee || t.due) && (
+                        <p className="mt-1 flex flex-wrap gap-x-3 text-[13px] text-subtle">
+                          {t.assignee && <span>{t.assignee}</span>}
+                          {t.due && <span className="text-warn">Due {t.due}</span>}
+                        </p>
                       )}
                     </div>
-                  )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
-                  {(segments || []).map((seg, i) => {
-                    const spIdx = speakers.indexOf(seg.speaker);
-                    const color = SPEAKER_COLORS[spIdx % SPEAKER_COLORS.length];
-                    return (
-                      <div key={i} style={{
-                        background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                        padding: "12px 16px",
-                      }}>
-                        <div style={{
-                          display: "flex", alignItems: "center", gap: 10, marginBottom: 6,
-                          fontFamily: FONTS.mono, fontSize: 10,
-                          textTransform: "uppercase", letterSpacing: "0.1em",
-                        }}>
-                          <span className="status-dot" style={{ background: color }}/>
-                          <span style={{ color }}>{seg.speaker}</span>
-                          <span style={{ color: COLORS.textTertiary }}>{fmtTime(seg.start)}</span>
-                        </div>
-                        <div style={{ fontSize: 14, lineHeight: 1.6, color: COLORS.textPrimary }}>
-                          {seg.text}
-                        </div>
+          <section>
+            <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold">
+              <CheckCircle2 size={18} className="text-brand" /> Decisions
+              {decisions.length > 0 && <span className="text-subtle">{decisions.length}</span>}
+            </h2>
+            {extracting && !decisions.length ? <SkeletonList count={2} h="h-16" /> : decisions.length === 0 ? (
+              <p className="text-[15px] text-subtle">Nothing was settled in this meeting.</p>
+            ) : (
+              <ul className="space-y-2">
+                {decisions.map((d, i) => (
+                  <li key={i} className="card border-l-[3px] border-l-brand p-3.5">
+                    <p className="text-[15px] leading-relaxed">{d.text}</p>
+                    {d.context && <p className="mt-1 text-[13px] leading-snug text-subtle">{d.context}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <button className="btn btn-ghost btn-sm -ml-2" onClick={() => runExtract(true)} disabled={extracting}>
+            <RefreshCw size={15} className={extracting ? "animate-spin" : ""} /> {extracting ? "Reading the meeting…" : "Read the meeting again"}
+          </button>
+        </div>
+      )}
+
+      {/* ── Transcript ────────────────────────────────────────────────── */}
+      {tab === "transcript" && (
+        <div className="animate-rise">
+          {refine && refine.status !== "idle" && (
+            <Banner className="mb-4" tone={refine.status === "done" ? "success" : refine.status === "error" ? "warn" : "info"}>
+              {refine.status === "running" && `Improving accuracy in the background · ${refine.progress}%`}
+              {refine.status === "done" && "Transcript refined for accuracy."}
+              {refine.status === "error" && "Kept the live transcript — the accuracy pass wasn't available."}
+            </Banner>
+          )}
+
+          {(segments || []).length > 6 && (
+            <label className="relative mb-4 block">
+              <Search size={18} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-subtle" />
+              <input type="search" value={query} onChange={(e) => setQuery(e.target.value)}
+                     placeholder="Find in transcript" aria-label="Find in transcript" className="input pl-10" />
+            </label>
+          )}
+
+          {shown.length === 0 ? (
+            <p className="py-8 text-center text-[15px] text-subtle">{q ? "No line mentions that." : "No transcript for this meeting."}</p>
+          ) : (
+            <ol className="space-y-4">
+              {shown.map((seg, i) => {
+                const c = color(seg.speaker || "Speaker 1");
+                return (
+                  <li key={i} className="flex gap-3">
+                    <span className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${c.soft} ${c.text}`}>
+                      {(seg.speaker || "S").replace(/^Speaker\s*/i, "") || "S"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-0.5 flex items-baseline gap-2 text-[13px]">
+                        <span className={`font-semibold ${c.text}`}>{seg.speaker || "Speaker 1"}</span>
+                        <span className="font-mono text-xs text-subtle">{fmtClock(seg.start)}</span>
                       </div>
-                    );
-                  })}
+                      <p className="text-[15px] leading-relaxed">{seg.text}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+      )}
+
+      {/* ── Speakers ──────────────────────────────────────────────────── */}
+      {tab === "speakers" && (
+        <div className="space-y-2.5 animate-rise">
+          <p className="mb-1 text-sm text-subtle">Who spoke, and for how much of the meeting.</p>
+          {speakers.map((sp) => {
+            const s = stats[sp] || { words: 0, duration: 0 };
+            const pct = totalDur > 0 ? Math.round((s.duration / totalDur) * 100) : 0;
+            const c = color(sp);
+            return (
+              <div key={sp} className="card p-4">
+                <div className="mb-2.5 flex items-center gap-2.5">
+                  <span className={`size-2.5 rounded-full ${c.dot}`} />
+                  <span className="flex-1 font-semibold">{sp}</span>
+                  <span className={`text-2xl font-bold tabular-nums ${c.text}`}>{pct}%</span>
                 </div>
-              )}
-
-              {/* SPEAKERS TAB */}
-              {tab === "speakers" && (
-                <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {speakers.map((sp, i) => {
-                    const stats = speakerStats[sp] || { words: 0, duration: 0 };
-                    const pct = totalDur > 0 ? Math.round((stats.duration / totalDur) * 100) : 0;
-                    const color = SPEAKER_COLORS[i % SPEAKER_COLORS.length];
-                    return (
-                      <div key={sp} className="corners" style={{
-                        background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                        padding: "16px 20px",
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span className="status-dot" style={{ background: color }}/>
-                            <span style={{ fontFamily: FONTS.heading, fontSize: 20, color }}>{sp}</span>
-                          </div>
-                          <span style={{ fontFamily: FONTS.heading, fontSize: 32, color }}>{pct}%</span>
-                        </div>
-
-                        {/* Bar */}
-                        <div style={{ height: 4, background: COLORS.surfaceRaised, marginBottom: 12 }}>
-                          <div style={{ height: "100%", width: `${pct}%`, background: color, transition: "width 0.6s" }}/>
-                        </div>
-
-                        <div style={{ display: "flex", gap: 24, fontFamily: FONTS.mono, fontSize: 11, color: COLORS.textSecondary, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                          <span>{stats.words} words</span>
-                          <span>{Math.round(stats.duration)}s spoken</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="h-2 overflow-hidden rounded-full bg-surface-3">
+                  <div className={`h-full rounded-full ${c.dot} transition-[width] duration-700`} style={{ width: `${pct}%` }} />
                 </div>
-              )}
-
-            </div>
-          </div>
-        </main>
-      </div>
-    </>
+                <div className="mt-2 flex gap-4 text-[13px] text-subtle">
+                  <span>{s.words.toLocaleString()} words</span>
+                  <span>{fmtDuration(s.duration)} spoken</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Screen>
   );
 }
 
-function Extracted({ title, items, empty, render }) {
+function Fact({ Icon, children }) {
   return (
-    <div>
-      <div style={{
-        fontFamily: FONTS.mono, fontSize: 10, letterSpacing: "0.12em",
-        textTransform: "uppercase", color: COLORS.textTertiary, marginBottom: 10,
-      }}>
-        {title}{items.length ? ` · ${items.length}` : ""}
-      </div>
-      {items.length === 0
-        ? <div style={{ fontSize: 13, color: COLORS.textTertiary }}>{empty}</div>
-        : <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>{items.map(render)}</ul>}
-    </div>
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-3 px-2.5 py-1 font-medium text-muted">
+      <Icon size={14} /> {children}
+    </span>
   );
 }

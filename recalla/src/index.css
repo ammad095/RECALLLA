@@ -1,11 +1,202 @@
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* ============================================================
+   FILE PATH:  recalla/src/index.css
+   PURPOSE:    Design tokens, base styles and the few component
+               classes every screen shares. Mobile first: the phone
+               layout is the default, wider screens are the override.
+   ============================================================ */
+
+@import "tailwindcss";
+
+/* Light / dark follow <html data-theme>, set by theme.js before first paint.
+   Every fg/bg pair was contrast-checked for WCAG AA in both themes. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root,
+:root[data-theme="dark"] {
+  --bg:          #0B0E14;
+  --surface:     #131722;
+  --surface-2:   #1A1F2E;   /* hover / pressed */
+  --surface-3:   #222839;   /* raised, inputs */
+  --fg:          #F2F5FA;   /* 16.4:1 */
+  --muted:       #A9B4C9;   /*  8.6:1 */
+  --subtle:      #8591A6;   /*  5.6:1 */
+  --line:        rgba(255,255,255,0.09);
+  --line-strong: rgba(255,255,255,0.16);
+
+  --brand:    #34D399;      /* memory / primary actions */
+  --on-brand: #06281C;
+  --ai:       #A78BFA;      /* Ask Recalla */
+  --info:     #22D3EE;
+  --danger:   #F87171;      /* recording, destructive */
+  --warn:     #FBBF24;
+
+  --shadow-card: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-pop:  0 12px 32px rgba(0,0,0,.5);
+  --scrim:       rgba(0,0,0,.6);
+  --glass:       rgba(11,14,20,.82);
+  color-scheme: dark;
 }
 
-html, body, #root {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
+:root[data-theme="light"] {
+  --bg:          #F6F7FB;
+  --surface:     #FFFFFF;
+  --surface-2:   #F1F3F9;
+  --surface-3:   #E9ECF4;
+  --fg:          #0F172A;   /* 17.9:1 */
+  --muted:       #475569;   /*  7.6:1 */
+  --subtle:      #64748B;   /*  4.8:1 */
+  --line:        rgba(15,23,42,0.09);
+  --line-strong: rgba(15,23,42,0.16);
+
+  --brand:    #047857;      /* 5.5:1 on white */
+  --on-brand: #FFFFFF;
+  --ai:       #7C3AED;
+  --info:     #0E7490;
+  --danger:   #DC2626;
+  --warn:     #B45309;
+
+  --shadow-card: 0 1px 2px rgba(15,23,42,.06), 0 1px 1px rgba(15,23,42,.03);
+  --shadow-pop:  0 12px 32px rgba(15,23,42,.14);
+  --scrim:       rgba(15,23,42,.4);
+  --glass:       rgba(246,247,251,.85);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg:          var(--bg);
+  --color-surface:     var(--surface);
+  --color-surface-2:   var(--surface-2);
+  --color-surface-3:   var(--surface-3);
+  --color-fg:          var(--fg);
+  --color-muted:       var(--muted);
+  --color-subtle:      var(--subtle);
+  --color-line:        var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand:       var(--brand);
+  --color-on-brand:    var(--on-brand);
+  --color-ai:          var(--ai);
+  --color-info:        var(--info);
+  --color-danger:      var(--danger);
+  --color-warn:        var(--warn);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-pop:  var(--shadow-pop);
+
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+  button, [role="button"], a, label[for], select { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: var(--brand); color: var(--on-brand); }
+
+  * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+}
+
+/* ── Shared components ────────────────────────────────────────────────── */
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+    box-shadow: var(--shadow-card);
+  }
+  .card-tap {
+    @apply rounded-2xl border border-line bg-surface text-left
+           transition-[background-color,border-color,transform] duration-150;
+    box-shadow: var(--shadow-card);
+  }
+  .card-tap:hover  { @apply border-line-strong bg-surface-2; }
+  .card-tap:active { transform: scale(0.985); }
+
+  /* Buttons: 44px minimum height so every one is a comfortable thumb target. */
+  .btn {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4
+           text-[15px] font-semibold whitespace-nowrap select-none
+           transition-[background-color,color,border-color,transform,opacity,filter] duration-150;
+  }
+  .btn:active:not(:disabled) { transform: scale(0.97); }
+  .btn:disabled { opacity: .45; }
+  .btn-primary   { @apply bg-brand text-on-brand hover:brightness-110; }
+  .btn-ai        { @apply bg-ai text-white hover:brightness-110; }
+  .btn-danger    { @apply bg-danger text-white hover:brightness-110; }
+  .btn-secondary { @apply border border-line-strong bg-surface text-fg hover:bg-surface-2; }
+  .btn-ghost     { @apply text-muted hover:bg-surface-2 hover:text-fg; }
+  .btn-sm        { @apply min-h-9 rounded-lg px-3 text-sm; }
+
+  .icon-btn {
+    @apply inline-grid size-11 shrink-0 place-items-center rounded-xl text-muted
+           transition-[background-color,color,transform] duration-150
+           hover:bg-surface-2 hover:text-fg active:scale-95;
+  }
+
+  .input {
+    @apply min-h-11 w-full rounded-xl border border-line bg-surface-3/60 px-3.5 text-base
+           text-fg placeholder:text-subtle outline-none
+           transition-[border-color,box-shadow] duration-150;
+  }
+  .input:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 22%, transparent);
+  }
+
+  .label { @apply mb-1.5 block text-sm font-medium text-muted; }
+
+  .chip {
+    @apply inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5
+           text-sm font-medium text-muted transition-colors duration-150
+           hover:border-line-strong hover:text-fg;
+  }
+  .chip[aria-pressed="true"] { @apply border-transparent bg-fg text-bg; }
+
+  .tag { @apply inline-flex items-center rounded-md bg-surface-3 px-2 py-0.5 text-xs font-medium text-muted; }
+
+  .eyebrow { @apply text-xs font-semibold tracking-wide text-subtle uppercase; }
+
+  .skeleton { @apply relative overflow-hidden rounded-2xl bg-surface-3/70; }
+  .skeleton::after {
+    content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+/* ── Motion: transform + opacity only, and none when the OS asks ───────── */
+@keyframes shimmer  { to { transform: translateX(100%); } }
+@keyframes rise     { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes sheet-in { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ping-ring {
+  0%   { transform: scale(1);   opacity: .45; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+@keyframes blink { 50% { opacity: .35; } }
+
+@utility animate-rise      { animation: rise 320ms var(--ease-out-soft) both; }
+@utility animate-sheet-in  { animation: sheet-in 280ms var(--ease-out-soft) both; }
+@utility animate-fade-in   { animation: fade-in 200ms ease-out both; }
+@utility animate-blink     { animation: blink 1.2s ease-in-out infinite; }
+@utility animate-ping-ring { animation: ping-ring 1.6s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

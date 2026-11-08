@@ -1,14 +1,31 @@
 // ============================================================
 // FILE PATH:  recalla/src/Auth.jsx
-// PURPOSE:    Login + Register in one component. Minimal centered card.
+// PURPOSE:    Sign in / create account. For a first-time visitor this
+//             is the front door, so it says what Recalla does first.
 // ============================================================
 
 import { useState } from "react";
-import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
+import { Eye, EyeOff, Mic, Brain, Sparkles, Loader2 } from "lucide-react";
 import { login as apiLogin, register as apiRegister } from "./auth_api";
+import { Banner } from "./ui/kit";
+import Logo from "./ui/Logo";
+
+const STRENGTH = [
+  { label: "",       bar: "bg-surface-3" },
+  { label: "Weak",   bar: "bg-danger" },
+  { label: "Fair",   bar: "bg-warn" },
+  { label: "Good",   bar: "bg-info" },
+  { label: "Strong", bar: "bg-brand" },
+];
+
+const FEATURES = [
+  { Icon: Mic,      tone: "bg-danger/12 text-danger", title: "Record",       body: "Capture any meeting from your phone." },
+  { Icon: Brain,    tone: "bg-brand/12 text-brand",   title: "Remember",     body: "Transcript, summary, decisions and tasks." },
+  { Icon: Sparkles, tone: "bg-ai/12 text-ai",         title: "Ask anything", body: "Get answers, emails and reminders on demand." },
+];
 
 export default function Auth({ navigate, mode: initialMode = "login" }) {
-  const [mode, setMode]         = useState(initialMode); // "login" | "register"
+  const [mode, setMode]         = useState(initialMode);
   const [name, setName]         = useState("");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -18,310 +35,150 @@ export default function Auth({ navigate, mode: initialMode = "login" }) {
 
   const isRegister = mode === "register";
 
-  // Password strength (only for register)
   const strength = (() => {
     if (!password) return 0;
     let s = 0;
-    if (password.length >= 8)    s++;
-    if (/[A-Z]/.test(password))  s++;
-    if (/[0-9]/.test(password))  s++;
+    if (password.length >= 8) s++;
+    if (/[A-Z]/.test(password)) s++;
+    if (/[0-9]/.test(password)) s++;
     if (/[^A-Za-z0-9]/.test(password)) s++;
     return s;
   })();
-  const strengthLabel = ["", "Weak", "Fair", "Good", "Strong"][strength];
-  const strengthColor = [COLORS.textTertiary, COLORS.red, COLORS.amber, COLORS.cyan, COLORS.emerald][strength];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-
-    if (isRegister && !name.trim()) return setError("Name is required");
-    if (!email.trim() || !email.includes("@")) return setError("Valid email required");
-    if (!password) return setError("Password required");
-    if (isRegister && strength < 2) return setError("Password too weak");
+    if (isRegister && !name.trim()) return setError("Please enter your name.");
+    if (!email.trim() || !email.includes("@")) return setError("Please enter a valid email address.");
+    if (!password) return setError("Please enter your password.");
+    if (isRegister && strength < 2) return setError("Choose a stronger password — at least 8 characters with a number or capital letter.");
 
     setLoading(true);
     try {
-      if (isRegister) {
-        await apiRegister(name.trim(), email.trim(), password);
-      } else {
-        await apiLogin(email.trim(), password);
-      }
+      if (isRegister) await apiRegister(name.trim(), email.trim(), password);
+      else await apiLogin(email.trim(), password);
       navigate("dashboard");
     } catch (err) {
-      setError(
-        err.message === "Failed to fetch"
-          ? "Cannot reach the server — is the backend running?"
-          : err.message
-      );
+      setError(err.message === "Failed to fetch"
+        ? "Can't reach the Recalla server. Check your connection and try again."
+        : err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const switchMode = (m) => { setMode(m); setError(""); };
+
   return (
-    <>
-      <style>{GLOBAL_CSS}</style>
-      <div style={{
-        height: "100vh", width: "100vw", background: COLORS.bg,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 24, overflow: "auto",
-        backgroundImage: `radial-gradient(circle at 20% 30%, rgba(52,211,153,0.06) 0%, transparent 50%), radial-gradient(circle at 80% 70%, rgba(167,139,250,0.06) 0%, transparent 50%)`,
-      }}>
-        <div className="fade-up" style={{ width: "100%", maxWidth: 420 }}>
+    <div className="min-h-dvh overflow-y-auto bg-bg"
+         style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute -top-32 -left-24 size-96 rounded-full bg-brand/10 blur-3xl" />
+        <div className="absolute top-1/3 -right-32 size-96 rounded-full bg-ai/10 blur-3xl" />
+      </div>
 
-          {/* Logo */}
-          <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <div style={{
-              width: 56, height: 56, margin: "0 auto 16px",
-              background: `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: COLORS.glow.emerald,
-            }}>
-              <span style={{ fontFamily: FONTS.heading, fontSize: 28, color: COLORS.bg }}>R</span>
-            </div>
-            <div style={{
-              fontFamily: FONTS.heading, fontSize: 42, lineHeight: 1,
-              textTransform: "uppercase", letterSpacing: "0.02em", marginBottom: 8,
-            }}>
-              Recalla
-            </div>
-            <div style={{
-              fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-              textTransform: "uppercase", letterSpacing: "0.18em",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            }}>
-              <span className="status-dot" style={{ background: COLORS.emerald }}/>
-              AI Meeting Memory
+      <div className="relative mx-auto grid min-h-dvh max-w-5xl grid-cols-1 items-center gap-8 px-5 py-10 lg:grid-cols-2 lg:gap-16">
+        {/* What this is */}
+        <div className="animate-rise">
+          <div className="flex items-center gap-3">
+            <Logo size={44} />
+            <div>
+              <div className="text-2xl font-bold tracking-tight">Recalla</div>
+              <div className="text-sm text-subtle">Your meeting memory</div>
             </div>
           </div>
-
-          {/* Card */}
-          <div className="corners" style={{
-            background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-            padding: "28px 28px",
-          }}>
-            {/* Mode toggle */}
-            <div style={{ display: "flex", gap: 4, padding: 3, background: COLORS.bg, marginBottom: 22, borderRadius: 999 }}>
-              {["login", "register"].map(m => (
-                <button
-                  key={m}
-                  onClick={() => { setMode(m); setError(""); }}
-                  style={{
-                    flex: 1, background: mode === m
-                      ? `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})`
-                      : "transparent",
-                    color: mode === m ? COLORS.bg : COLORS.textSecondary,
-                    border: "none", padding: "8px 12px",
-                    fontFamily: FONTS.mono, fontSize: 11, fontWeight: 600,
-                    textTransform: "uppercase", letterSpacing: "0.1em",
-                    cursor: "pointer", borderRadius: 999,
-                    transition: "all 0.2s",
-                  }}
-                >
-                  {m === "login" ? "Sign In" : "Register"}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              {/* Name (register only) */}
-              {isRegister && (
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{
-                    display: "block", fontFamily: FONTS.mono, fontSize: 10,
-                    color: COLORS.textSecondary, textTransform: "uppercase",
-                    letterSpacing: "0.1em", marginBottom: 6,
-                  }}>
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Ammad Ahmad"
-                    style={{
-                      width: "100%", background: COLORS.bg,
-                      border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary,
-                      padding: "10px 14px", fontFamily: FONTS.body, fontSize: 14,
-                      outline: "none", transition: "border 0.2s",
-                    }}
-                    onFocus={e => e.target.style.borderColor = COLORS.borderEmerald}
-                    onBlur={e => e.target.style.borderColor = COLORS.border}
-                  />
-                </div>
-              )}
-
-              <div style={{ marginBottom: 14 }}>
-                <label style={{
-                  display: "block", fontFamily: FONTS.mono, fontSize: 10,
-                  color: COLORS.textSecondary, textTransform: "uppercase",
-                  letterSpacing: "0.1em", marginBottom: 6,
-                }}>
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  style={{
-                    width: "100%", background: COLORS.bg,
-                    border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary,
-                    padding: "10px 14px", fontFamily: FONTS.body, fontSize: 14,
-                    outline: "none", transition: "border 0.2s",
-                  }}
-                  onFocus={e => e.target.style.borderColor = COLORS.borderEmerald}
-                  onBlur={e => e.target.style.borderColor = COLORS.border}
-                />
-              </div>
-
-              <div style={{ marginBottom: 14 }}>
-                <label style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-                  textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6,
-                }}>
-                  <span>Password</span>
-                  {!isRegister && (
-                    <button type="button" style={{
-                      background: "none", border: "none", color: COLORS.emerald,
-                      fontFamily: "inherit", fontSize: "inherit", textTransform: "inherit",
-                      letterSpacing: "inherit", cursor: "pointer",
-                    }}>
-                      Forgot?
-                    </button>
-                  )}
-                </label>
-                <div style={{
-                  display: "flex", background: COLORS.bg,
-                  border: `1px solid ${COLORS.border}`,
-                }}>
-                  <input
-                    type={showPass ? "text" : "password"}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    style={{
-                      flex: 1, background: "transparent", border: "none",
-                      color: COLORS.textPrimary, fontFamily: FONTS.body, fontSize: 14,
-                      padding: "10px 14px", outline: "none",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPass(!showPass)}
-                    style={{
-                      background: "transparent", border: "none",
-                      color: COLORS.textSecondary, padding: "0 12px",
-                      cursor: "pointer", fontFamily: FONTS.mono, fontSize: 10,
-                      textTransform: "uppercase", letterSpacing: "0.1em",
-                    }}
-                  >
-                    {showPass ? "Hide" : "Show"}
-                  </button>
-                </div>
-
-                {isRegister && password && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ display: "flex", gap: 3, marginBottom: 4 }}>
-                      {[1,2,3,4].map(i => (
-                        <div key={i} style={{
-                          flex: 1, height: 3,
-                          background: i <= strength ? strengthColor : COLORS.surfaceRaised,
-                          transition: "background 0.2s",
-                        }}/>
-                      ))}
-                    </div>
-                    <div style={{
-                      fontFamily: FONTS.mono, fontSize: 10, color: strengthColor,
-                      textTransform: "uppercase", letterSpacing: "0.1em",
-                    }}>
-                      {strengthLabel}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {error && (
-                <div style={{
-                  padding: "10px 14px", marginBottom: 14,
-                  background: "rgba(248,113,113,0.10)",
-                  border: `1px solid rgba(248,113,113,0.3)`,
-                  color: COLORS.red, fontFamily: FONTS.mono, fontSize: 12,
-                  display: "flex", alignItems: "center", gap: 8,
-                }}>
-                  <span className="status-dot" style={{ background: COLORS.red }}/>
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  background: loading
-                    ? COLORS.surfaceRaised
-                    : `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})`,
-                  color: loading ? COLORS.textTertiary : COLORS.bg,
-                  border: "none", padding: "12px",
-                  fontFamily: FONTS.mono, fontSize: 12, fontWeight: 600,
-                  textTransform: "uppercase", letterSpacing: "0.12em",
-                  cursor: loading ? "not-allowed" : "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
-                {loading ? "..." : isRegister ? "Create Account" : "Sign In"}
-              </button>
-
-              {/* Divider */}
-              <div style={{
-                display: "flex", alignItems: "center", gap: 10,
-                margin: "20px 0 14px",
-              }}>
-                <div style={{ flex: 1, height: 1, background: COLORS.border }}/>
-                <span style={{
-                  fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textTertiary,
-                  textTransform: "uppercase", letterSpacing: "0.1em",
-                }}>
-                  Or
+          <h1 className="mt-6 text-[28px] font-bold leading-tight tracking-tight sm:text-4xl">
+            Never lose track of what was said in a meeting.
+          </h1>
+          <ul className="mt-6 hidden space-y-4 sm:block">
+            {FEATURES.map(({ Icon, tone, title, body }) => (
+              <li key={title} className="flex items-center gap-3.5">
+                <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}><Icon size={21} /></span>
+                <span>
+                  <span className="block font-semibold">{title}</span>
+                  <span className="block text-[15px] text-muted">{body}</span>
                 </span>
-                <div style={{ flex: 1, height: 1, background: COLORS.border }}/>
-              </div>
-
-              <button
-                type="button"
-                style={{
-                  width: "100%", background: "transparent",
-                  border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary,
-                  padding: "10px", fontFamily: FONTS.body, fontSize: 13,
-                  cursor: "pointer", transition: "border 0.2s",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = COLORS.borderStrong; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = COLORS.border; }}
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                Continue with Google
-              </button>
-            </form>
-          </div>
-
-          <div style={{
-            textAlign: "center", marginTop: 20,
-            fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textTertiary,
-            textTransform: "uppercase", letterSpacing: "0.12em",
-          }}>
-            By continuing, you agree to our Terms
+              </li>
+            ))}
+          </ul>
+          {/* Phones: the same three ideas, compact */}
+          <div className="mt-4 flex gap-2 sm:hidden">
+            {FEATURES.map(({ Icon, tone, title }) => (
+              <span key={title} className="flex flex-1 flex-col items-center gap-1.5 rounded-2xl border border-line bg-surface p-3 text-center text-[13px] font-medium">
+                <span className={`grid size-9 place-items-center rounded-lg ${tone}`}><Icon size={18} /></span>
+                {title}
+              </span>
+            ))}
           </div>
         </div>
+
+        {/* The form */}
+        <div className="card w-full p-5 animate-rise sm:p-7 lg:max-w-md lg:justify-self-end" style={{ animationDelay: "60ms" }}>
+          <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-surface-3/60 p-1" role="tablist">
+            {[["login", "Sign in"], ["register", "Create account"]].map(([m, label]) => (
+              <button key={m} role="tab" aria-selected={mode === m} onClick={() => switchMode(m)}
+                      className={`min-h-10 rounded-lg text-sm font-semibold transition-colors
+                        ${mode === m ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            {isRegister && (
+              <div>
+                <label className="label" htmlFor="a-name">Your name</label>
+                <input id="a-name" className="input" value={name} onChange={(e) => setName(e.target.value)}
+                       autoComplete="name" placeholder="Ammad Ahmad" />
+              </div>
+            )}
+
+            <div>
+              <label className="label" htmlFor="a-email">Email</label>
+              <input id="a-email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none"
+                     className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+            </div>
+
+            <div>
+              <label className="label" htmlFor="a-pass">Password</label>
+              <div className="relative">
+                <input id="a-pass" type={showPass ? "text" : "password"} className="input pr-12"
+                       autoComplete={isRegister ? "new-password" : "current-password"}
+                       value={password} onChange={(e) => setPassword(e.target.value)} />
+                <button type="button" onClick={() => setShowPass((s) => !s)}
+                        aria-label={showPass ? "Hide password" : "Show password"}
+                        className="absolute top-1/2 right-1 grid size-10 -translate-y-1/2 place-items-center rounded-lg text-subtle hover:text-fg">
+                  {showPass ? <EyeOff size={19} /> : <Eye size={19} />}
+                </button>
+              </div>
+              {isRegister && password && (
+                <div className="mt-2" aria-live="polite">
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4].map((i) => (
+                      <span key={i} className={`h-1 flex-1 rounded-full transition-colors ${i <= strength ? STRENGTH[strength].bar : "bg-surface-3"}`} />
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-subtle">Password strength: {STRENGTH[strength].label}</p>
+                </div>
+              )}
+            </div>
+
+            {error && <Banner>{error}</Banner>}
+
+            <button type="submit" disabled={loading} className="btn btn-primary w-full">
+              {loading && <Loader2 size={18} className="animate-spin" />}
+              {loading ? (isRegister ? "Creating your account…" : "Signing in…") : isRegister ? "Create account" : "Sign in"}
+            </button>
+          </form>
+
+          <p className="mt-5 text-center text-sm text-muted">
+            {isRegister ? "Already have an account? " : "New to Recalla? "}
+            <button className="font-semibold text-brand" onClick={() => switchMode(isRegister ? "login" : "register")}>
+              {isRegister ? "Sign in" : "Create an account"}
+            </button>
+          </p>
+        </div>
       </div>
-    </>
+    </div>
   );
 }

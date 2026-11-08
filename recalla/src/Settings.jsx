@@ -10,84 +10,40 @@
 // ============================================================
 
 import { useState, useEffect } from "react";
-import { COLORS, FONTS, MOTION, GLOBAL_CSS } from "./theme";
-import Sidebar from "./Sidebar";
+import { Monitor, Sun, Moon, Check, LogOut, ShieldCheck } from "lucide-react";
 import { useTheme } from "./useTheme";
 import { getSettings, updateSettings } from "./data_api";
 import { updateProfile } from "./auth_api";
+import { Screen, Banner, Toggle, Avatar } from "./ui/kit";
 
-const Toggle = ({ on, onChange, disabled }) => (
-  <button
-    onClick={() => !disabled && onChange(!on)}
-    role="switch"
-    aria-checked={on}
-    disabled={disabled}
-    style={{
-      width: 40, height: 22, borderRadius: 999, border: "none",
-      background: on ? COLORS.emerald : COLORS.surfaceRaised,
-      cursor: disabled ? "not-allowed" : "pointer",
-      position: "relative", flexShrink: 0, opacity: disabled ? 0.5 : 1,
-      transition: `background-color ${MOTION.base} ease`,
-    }}
-  >
-    <span style={{
-      position: "absolute", top: 3, left: 3,
-      width: 16, height: 16, borderRadius: "50%",
-      background: on ? COLORS.onAccent : COLORS.textSecondary,
-      transform: `translate3d(${on ? 18 : 0}px,0,0)`,
-      transition: `transform ${MOTION.base} ${MOTION.spring}`,
-    }}/>
-  </button>
+/** A grouped list, like a phone's own settings. */
+const Group = ({ title, footer, children }) => (
+  <section className="mb-7">
+    <h2 className="eyebrow mb-2 px-1">{title}</h2>
+    <div className="card divide-y divide-line">{children}</div>
+    {footer && <p className="mt-2 px-1 text-[13px] leading-relaxed text-subtle">{footer}</p>}
+  </section>
 );
 
-const Select = ({ value, onChange, options }) => (
-  <select
-    value={value}
-    onChange={(e) => onChange(e.target.value)}
-    style={{
-      background: COLORS.surfaceRaised, color: COLORS.textPrimary,
-      border: `1px solid ${COLORS.border}`, borderRadius: 8,
-      padding: "7px 11px", fontFamily: FONTS.body, fontSize: 13,
-      cursor: "pointer", minWidth: 150,
-    }}
-  >
+/** Label on the left, control on the right; wide controls drop below on a phone. */
+const Row = ({ label, hint, children, stack = false, htmlFor }) => (
+  <div className={`flex gap-3 px-4 py-3.5 ${stack ? "flex-col sm:flex-row sm:items-center" : "items-center"}`}>
+    <div className="min-w-0 flex-1">
+      <label htmlFor={htmlFor} className="block text-[15px] font-medium">{label}</label>
+      {hint && <p className="mt-0.5 text-[13px] leading-snug text-subtle">{hint}</p>}
+    </div>
+    <div className={stack ? "w-full sm:w-56" : "shrink-0"}>{children}</div>
+  </div>
+);
+
+const Select = ({ id, value, onChange, options }) => (
+  <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className="input pr-8">
     {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
   </select>
 );
 
-const Row = ({ label, hint, children }) => (
-  <div style={{
-    padding: "15px 0", borderBottom: `1px solid ${COLORS.border}`,
-    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20,
-  }}>
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 14, color: COLORS.textPrimary, marginBottom: hint ? 4 : 0 }}>{label}</div>
-      {hint && <div style={{ fontSize: 12.5, color: COLORS.textSecondary, lineHeight: 1.5 }}>{hint}</div>}
-    </div>
-    {children}
-  </div>
-);
-
-const Section = ({ title, children }) => (
-  <div style={{ marginBottom: 36 }}>
-    <div style={{
-      fontFamily: FONTS.heading, fontSize: 22, lineHeight: 1,
-      textTransform: "uppercase", letterSpacing: "0.02em", marginBottom: 12,
-      color: COLORS.textPrimary,
-    }}>{title}</div>
-    {children}
-  </div>
-);
-
-const inputStyle = {
-  background: COLORS.surfaceRaised, color: COLORS.textPrimary,
-  border: `1px solid ${COLORS.border}`, borderRadius: 8,
-  padding: "8px 11px", fontFamily: FONTS.body, fontSize: 13,
-  outline: "none", width: 220,
-};
-
 export default function Settings({ navigate, user }) {
-  const { setTheme } = useTheme();
+  const { setTheme, followSystem } = useTheme();
 
   const [settings, setSettings] = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -101,18 +57,14 @@ export default function Settings({ navigate, user }) {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
-      try {
-        const s = await getSettings();
+    getSettings()
+      .then((s) => {
         if (!alive) return;
         setSettings(s);
         if (s.theme !== "system") setTheme(s.theme);
-      } catch (e) {
-        if (alive) setError(e.message);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
+      })
+      .catch((e) => alive && setError(e.message))
+      .finally(() => alive && setLoading(false));
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -124,7 +76,7 @@ export default function Settings({ navigate, user }) {
 
   const update = async (key, value) => {
     setSettings((s) => ({ ...s, [key]: value }));       // optimistic
-    if (key === "theme" && value !== "system") setTheme(value);
+    if (key === "theme") value === "system" ? followSystem() : setTheme(value);
     try {
       await updateSettings({ [key]: value });
       flashSaved();
@@ -141,240 +93,158 @@ export default function Settings({ navigate, user }) {
     } catch (e) { setError(e.message); }
   };
 
-  const changePassword = async () => {
+  const changePassword = async (e) => {
+    e.preventDefault();
     setPwMsg(null);
-    if (!curPw || !newPw) return setPwMsg({ ok: false, text: "Fill in both password fields" });
+    if (!curPw || !newPw) return setPwMsg({ ok: false, text: "Fill in both password fields." });
     try {
       await updateProfile({ currentPassword: curPw, newPassword: newPw });
       setCurPw(""); setNewPw("");
-      setPwMsg({ ok: true, text: "Password updated" });
-    } catch (e) {
-      setPwMsg({ ok: false, text: e.message });
+      setPwMsg({ ok: true, text: "Password updated." });
+    } catch (err) {
+      setPwMsg({ ok: false, text: err.message });
     }
   };
 
+  const theme = settings?.theme || "system";
+
   return (
-    <>
-      <style>{GLOBAL_CSS}</style>
-      <div className="themed" style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="settings" navigate={navigate} user={user} />
+    <Screen
+      title="Settings"
+      width="max-w-2xl"
+      actions={
+        <span aria-live="polite" className={`inline-flex items-center gap-1 pr-2 text-sm font-medium text-brand transition-opacity ${saved ? "opacity-100" : "opacity-0"}`}>
+          <Check size={16} /> Saved
+        </span>
+      }
+    >
+      {error && <Banner className="mb-5" onClose={() => setError(null)}>{error}</Banner>}
 
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <header style={{
-            padding: "18px 28px", borderBottom: `1px solid ${COLORS.border}`,
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-          }}>
-            <div style={{
-              fontFamily: FONTS.heading, fontSize: 26, lineHeight: 1,
-              textTransform: "uppercase", letterSpacing: "0.02em", color: COLORS.textPrimary,
-            }}>Settings</div>
-            <span style={{
-              fontFamily: FONTS.mono, fontSize: 10, letterSpacing: "0.12em",
-              textTransform: "uppercase", color: COLORS.emerald,
-              opacity: saved ? 1 : 0, transition: `opacity ${MOTION.base} ease`,
-            }}>Saved</span>
-          </header>
+      {/* ── Profile card ──────────────────────────────────────────────── */}
+      <div className="card mb-7 flex items-center gap-3.5 p-4">
+        <Avatar name={name || user?.name} size={52} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-lg font-semibold">{name || user?.name}</div>
+          <div className="truncate text-sm text-subtle">{user?.email}</div>
+        </div>
+        {user?.role === "admin" && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-danger/12 px-2.5 py-1 text-xs font-semibold text-danger">
+            <ShieldCheck size={13} /> Admin
+          </span>
+        )}
+      </div>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: "30px 28px 60px" }}>
-            <div style={{ maxWidth: 640, margin: "0 auto" }}>
+      <Group title="Account" footer="Your sign-in email can't be changed.">
+        <Row label="Name" htmlFor="s-name" stack>
+          <input id="s-name" className="input" value={name} onChange={(e) => setName(e.target.value)}
+                 onBlur={saveName} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} autoComplete="name" />
+        </Row>
+      </Group>
 
-              {error && (
-                <div style={{
-                  padding: "11px 15px", borderRadius: 10, marginBottom: 22,
-                  background: COLORS.surface, border: `1px solid ${COLORS.red}`,
-                  color: COLORS.red, fontSize: 13,
-                }}>{error}</div>
-              )}
+      <Group title="Appearance">
+        <div className="px-4 py-3.5">
+          <div className="mb-2.5 text-[15px] font-medium">Theme</div>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Theme">
+            {[
+              { value: "system", label: "System", Icon: Monitor },
+              { value: "light",  label: "Light",  Icon: Sun },
+              { value: "dark",   label: "Dark",   Icon: Moon },
+            ].map(({ value, label, Icon }) => (
+              <button key={value} role="radio" aria-checked={theme === value} onClick={() => update("theme", value)}
+                      className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border text-sm font-medium transition-colors
+                        ${theme === value ? "border-brand bg-brand/10 text-brand" : "border-line text-muted hover:bg-surface-2"}`}>
+                <Icon size={20} /> {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[13px] text-subtle">System follows your phone's light or dark setting.</p>
+        </div>
+      </Group>
 
-              {/* ── Account ─────────────────────────────────────────── */}
-              <Section title="Account">
-                <Row label="Name">
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onBlur={saveName}
-                    onKeyDown={(e) => e.key === "Enter" && saveName()}
-                    style={inputStyle}
-                  />
-                </Row>
-                <Row label="Email" hint="Your sign-in address cannot be changed">
-                  <span style={{ fontSize: 13, color: COLORS.textSecondary }}>{user?.email || "—"}</span>
-                </Row>
-                <Row label="Account type">
-                  <span style={{
-                    fontFamily: FONTS.mono, fontSize: 10, padding: "4px 10px", borderRadius: 999,
-                    textTransform: "uppercase", letterSpacing: "0.1em",
-                    background: COLORS.surfaceRaised,
-                    color: user?.role === "admin" ? COLORS.red : COLORS.emerald,
-                  }}>{user?.role || "user"}</span>
-                </Row>
-              </Section>
+      <Group title="Meetings">
+        <Row label="Usual kind of meeting" hint="Pre-selected when you start recording" htmlFor="s-type" stack>
+          <Select id="s-type" value={settings?.default_meeting_type || "Team Meeting"}
+                  onChange={(v) => update("default_meeting_type", v)}
+                  options={["Team Meeting", "Supervisor Meeting", "Lecture", "Interview", "One-on-One"].map((v) => ({ value: v, label: v }))} />
+        </Row>
+        <Row label="Spoken language" hint="Detected automatically unless you pick one" htmlFor="s-lang" stack>
+          <Select id="s-lang" value={settings?.spoken_language || "auto"} onChange={(v) => update("spoken_language", v)}
+                  options={[{ value: "auto", label: "Detect automatically" }, { value: "en", label: "English" }, { value: "ur", label: "Urdu" }]} />
+        </Row>
+        <Row label="Summary after each meeting" hint="A short recap with the decisions and action items">
+          <Toggle label="Summary after each meeting" on={settings?.auto_summary ?? true} disabled={loading}
+                  onChange={(v) => update("auto_summary", v)} />
+        </Row>
+      </Group>
 
-              {/* ── Password ────────────────────────────────────────── */}
-              <Section title="Password">
-                <Row label="Current password">
-                  <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)}
-                         placeholder="••••••••" style={inputStyle}/>
-                </Row>
-                <Row label="New password" hint="At least 8 characters, with a letter and a number">
-                  <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)}
-                         placeholder="••••••••" style={inputStyle}/>
-                </Row>
-                <div style={{ paddingTop: 14, display: "flex", alignItems: "center", gap: 14 }}>
-                  <button onClick={changePassword} className="press" style={{
-                    background: COLORS.surfaceRaised, color: COLORS.textPrimary,
-                    border: `1px solid ${COLORS.borderStrong}`, borderRadius: 999,
-                    padding: "9px 18px", fontFamily: FONTS.mono, fontSize: 11,
-                    textTransform: "uppercase", letterSpacing: "0.1em", cursor: "pointer",
-                  }}>Change password</button>
-                  {pwMsg && (
-                    <span style={{ fontSize: 12.5, color: pwMsg.ok ? COLORS.emerald : COLORS.red }}>
-                      {pwMsg.text}
-                    </span>
-                  )}
-                </div>
-              </Section>
+      <Group title="Notifications">
+        <Row label="Remind me about upcoming items">
+          <Toggle label="Reminders" on={settings?.notifications_enabled ?? true} disabled={loading}
+                  onChange={(v) => update("notifications_enabled", v)} />
+        </Row>
+        <Row label="Play a sound">
+          <Toggle label="Sound" on={settings?.notification_sound ?? true} disabled={loading}
+                  onChange={(v) => update("notification_sound", v)} />
+        </Row>
+        <Row label="How early" htmlFor="s-lead" stack>
+          <Select id="s-lead" value={String(settings?.reminder_lead_minutes ?? 10)}
+                  onChange={(v) => update("reminder_lead_minutes", parseInt(v, 10))}
+                  options={[
+                    { value: "0", label: "At the time" }, { value: "5", label: "5 minutes before" },
+                    { value: "10", label: "10 minutes before" }, { value: "30", label: "30 minutes before" },
+                    { value: "60", label: "1 hour before" }, { value: "1440", label: "1 day before" },
+                  ]} />
+        </Row>
+        <Row label="Time zone" hint="Reminder times are shown in this zone" htmlFor="s-tz" stack>
+          <Select id="s-tz" value={settings?.timezone_name ?? "Asia/Karachi"} onChange={(v) => update("timezone_name", v)}
+                  options={[
+                    { value: "Asia/Karachi", label: "Pakistan (PKT)" }, { value: "Asia/Dubai", label: "Gulf (GST)" },
+                    { value: "Asia/Kolkata", label: "India (IST)" }, { value: "Europe/London", label: "UK (GMT/BST)" },
+                    { value: "America/New_York", label: "US Eastern" }, { value: "UTC", label: "UTC" },
+                  ]} />
+        </Row>
+      </Group>
 
-              {/* ── Appearance ──────────────────────────────────────── */}
-              <Section title="Appearance">
-                <Row label="Theme" hint="“System” follows your computer's light or dark setting">
-                  <Select
-                    value={settings?.theme || "system"}
-                    onChange={(v) => update("theme", v)}
-                    options={[
-                      { value: "system", label: "System" },
-                      { value: "light",  label: "Light" },
-                      { value: "dark",   label: "Dark" },
-                    ]}
-                  />
-                </Row>
-              </Section>
-
-              {/* ── Meetings ────────────────────────────────────────── */}
-              <Section title="Meetings">
-                <Row label="Default meeting type" hint="Pre-selected when you start a new recording">
-                  <Select
-                    value={settings?.default_meeting_type || "Team Meeting"}
-                    onChange={(v) => update("default_meeting_type", v)}
-                    options={[
-                      { value: "Team Meeting",       label: "Team Meeting" },
-                      { value: "Supervisor Meeting", label: "Supervisor Meeting" },
-                      { value: "Lecture",            label: "Lecture" },
-                      { value: "Interview",          label: "Interview" },
-                      { value: "One-on-One",         label: "One-on-One" },
-                    ]}
-                  />
-                </Row>
-                <Row label="Spoken language" hint="Detected automatically unless you pick one">
-                  <Select
-                    value={settings?.spoken_language || "auto"}
-                    onChange={(v) => update("spoken_language", v)}
-                    options={[
-                      { value: "auto", label: "Detect automatically" },
-                      { value: "en",   label: "English" },
-                      { value: "ur",   label: "Urdu" },
-                    ]}
-                  />
-                </Row>
-                <Row label="Write a summary after each meeting"
-                     hint="A short recap with the key decisions and action items">
-                  <Toggle on={settings?.auto_summary ?? true} disabled={loading}
-                          onChange={(v) => update("auto_summary", v)}/>
-                </Row>
-              </Section>
-
-              {/* ── Notifications ───────────────────────────────────── */}
-              <Section title="Notifications">
-                <Row label="Remind me about upcoming items">
-                  <Toggle on={settings?.notifications_enabled ?? true} disabled={loading}
-                          onChange={(v) => update("notifications_enabled", v)}/>
-                </Row>
-                <Row label="Play a sound">
-                  <Toggle on={settings?.notification_sound ?? true} disabled={loading}
-                          onChange={(v) => update("notification_sound", v)}/>
-                </Row>
-                <Row label="How early to remind me">
-                  <Select
-                    value={String(settings?.reminder_lead_minutes ?? 10)}
-                    onChange={(v) => update("reminder_lead_minutes", parseInt(v, 10))}
-                    options={[
-                      { value: "0",    label: "At the time" },
-                      { value: "5",    label: "5 minutes before" },
-                      { value: "10",   label: "10 minutes before" },
-                      { value: "30",   label: "30 minutes before" },
-                      { value: "60",   label: "1 hour before" },
-                      { value: "1440", label: "1 day before" },
-                    ]}
-                  />
-                </Row>
-                <Row label="Your time zone"
-                     hint="Reminder times are shown in this zone">
-                  <Select
-                    value={settings?.timezone_name ?? "Asia/Karachi"}
-                    onChange={(v) => update("timezone_name", v)}
-                    options={[
-                      { value: "Asia/Karachi",     label: "Pakistan (PKT)" },
-                      { value: "Asia/Dubai",       label: "Gulf (GST)" },
-                      { value: "Asia/Kolkata",     label: "India (IST)" },
-                      { value: "Europe/London",    label: "UK (GMT/BST)" },
-                      { value: "America/New_York", label: "US Eastern" },
-                      { value: "UTC",              label: "UTC" },
-                    ]}
-                  />
-                </Row>
-              </Section>
-
-              {/* ── How Recalla records ─────────────────────────────── */}
-              {/* Stated, not configurable: these always run at full quality. */}
-              <Section title="How Recalla records">
-                <div style={{
-                  background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                  borderRadius: 14, padding: "16px 18px",
-                }}>
-                  <div style={{ fontSize: 13, color: COLORS.textSecondary, lineHeight: 1.65, marginBottom: 14 }}>
-                    Every meeting is handled the same way, at the highest quality your
-                    computer supports. There is nothing to configure.
-                  </div>
-                  {[
-                    ["Transcribed as you speak",   "Words appear live, so the transcript is ready the moment you stop."],
-                    ["Speakers identified",        "Each line is labelled with who said it."],
-                    ["Accuracy improved afterwards","A second, more careful pass refines the text in the background."],
-                    ["Saved to your account",      "Transcripts stay private to you and are searchable later."],
-                  ].map(([title, hint]) => (
-                    <div key={title} style={{ display: "flex", gap: 10, marginBottom: 11 }}>
-                      <span style={{ color: COLORS.emerald, fontSize: 13, lineHeight: 1.5 }}>✓</span>
-                      <div>
-                        <div style={{ fontSize: 13.5, color: COLORS.textPrimary }}>{title}</div>
-                        <div style={{ fontSize: 12.5, color: COLORS.textTertiary, lineHeight: 1.5 }}>{hint}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Section>
-
-              {/* ── Danger zone ─────────────────────────────────────── */}
-              <Section title="Danger Zone">
-                <div style={{
-                  border: `1px solid ${COLORS.red}`, borderRadius: 14, padding: "16px 18px",
-                  background: COLORS.surface,
-                }}>
-                  <div style={{ fontSize: 14, color: COLORS.textPrimary, marginBottom: 5 }}>Sign out</div>
-                  <div style={{ fontSize: 12.5, color: COLORS.textSecondary, marginBottom: 14, lineHeight: 1.5 }}>
-                    Your meetings and reminders stay saved to your account.
-                  </div>
-                  <button onClick={() => navigate("logout")} className="press" style={{
-                    background: "transparent", color: COLORS.red,
-                    border: `1px solid ${COLORS.red}`, borderRadius: 999,
-                    padding: "9px 18px", fontFamily: FONTS.mono, fontSize: 11,
-                    textTransform: "uppercase", letterSpacing: "0.1em", cursor: "pointer",
-                  }}>Sign out</button>
-                </div>
-              </Section>
-
+      {/* Stated, not configurable: these always run at full quality. */}
+      <Group title="How Recalla records" footer="Every meeting is handled the same way — there's nothing to configure.">
+        {[
+          ["Transcribed as you speak", "Words appear live, so the transcript is ready the moment you stop."],
+          ["Speakers identified", "Each line is labelled with who said it."],
+          ["Audio stays on your device", "Only the text is sent to your account."],
+          ["Private and searchable", "Transcripts are yours alone, and Recalla can answer questions about them."],
+        ].map(([title, hint]) => (
+          <div key={title} className="flex gap-3 px-4 py-3">
+            <Check size={18} className="mt-0.5 shrink-0 text-brand" />
+            <div>
+              <div className="text-[15px] font-medium">{title}</div>
+              <div className="text-[13px] leading-snug text-subtle">{hint}</div>
             </div>
           </div>
-        </main>
-      </div>
-    </>
+        ))}
+      </Group>
+
+      <Group title="Password">
+        <form onSubmit={changePassword} className="space-y-3 p-4">
+          <div>
+            <label className="label" htmlFor="s-cur">Current password</label>
+            <input id="s-cur" type="password" className="input" value={curPw} onChange={(e) => setCurPw(e.target.value)}
+                   autoComplete="current-password" />
+          </div>
+          <div>
+            <label className="label" htmlFor="s-new">New password</label>
+            <input id="s-new" type="password" className="input" value={newPw} onChange={(e) => setNewPw(e.target.value)}
+                   autoComplete="new-password" aria-describedby="s-new-hint" />
+            <p id="s-new-hint" className="mt-1 text-[13px] text-subtle">At least 8 characters, with a letter and a number.</p>
+          </div>
+          {pwMsg && <Banner tone={pwMsg.ok ? "success" : "error"}>{pwMsg.text}</Banner>}
+          <button type="submit" className="btn btn-secondary w-full sm:w-auto">Change password</button>
+        </form>
+      </Group>
+
+      <button onClick={() => navigate("logout")} className="btn btn-secondary mb-4 w-full text-danger">
+        <LogOut size={18} /> Sign out
+      </button>
+      <p className="text-center text-[13px] text-subtle">Your meetings and reminders stay saved to your account.</p>
+    </Screen>
   );
 }

@@ -5,17 +5,18 @@
 // ============================================================
 
 import { useState, useRef, useEffect } from "react";
-import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
-import Sidebar from "./Sidebar";
 import {
-  transcribeAudio,
-  startLiveSession, sendLiveChunk, finalizeLiveSession,
-} from "./api";
-import { createLiveRecorder } from "./liveRecorder";
+  Mic, Square, Upload, ChevronDown, UserPlus, X, ShieldCheck, Users, Sparkles, Check, Loader2,
+} from "lucide-react";
+import { transcribeAudio, finalizeLiveSession } from "./api";
 import { BrowserTranscription, browserSttSupported, transcribeFile } from "./localStt";
 import { assignSpeakers } from "./diarize";
 import { summarizeTranscript } from "./agent_api";
-import { saveMeeting } from "./data_api";
+import { saveMeeting, getSettings } from "./data_api";
+import { fmtClock } from "./format";
+import { cssColor } from "./theme";
+import { Screen, Banner } from "./ui/kit";
+import { useShell } from "./ui/shellContext";
 
 // Batch path (file uploads) — transcription happens after the fact.
 //
@@ -39,12 +40,16 @@ const LIVE_STEPS = [
   "Done",
 ];
 
-export default function RecordMeeting({ navigate , user }) {
+const MEETING_TYPES = ["Team Meeting", "Supervisor Meeting", "Lecture", "Interview", "One-on-One"];
+
+export default function RecordMeeting({ navigate }) {
+  const { setImmersive } = useShell();
   const [state, setState]               = useState("idle");     // idle | recording | processing
   const [title, setTitle]               = useState("");
   const [meetingType, setMeetingType]   = useState("Team Meeting");
   const [participants, setParticipants] = useState([]);
   const [newParticipant, setNewParticipant] = useState("");
+  const [detailsOpen, setDetailsOpen]   = useState(false);
   const [elapsed, setElapsed]           = useState(0);
   const [progress, setProgress]         = useState(0);
   const [currentStep, setCurrentStep]   = useState(0);
@@ -53,7 +58,6 @@ export default function RecordMeeting({ navigate , user }) {
   // Live pipeline
   const [isLive, setIsLive]             = useState(false);
   const [liveSegments, setLiveSegments] = useState([]);
-  const [liveLag, setLiveLag]           = useState(0);
   const [liveQueued, setLiveQueued]     = useState(0);
   // First run downloads the speech model (~40 MB) into the browser cache.
   const [modelPct, setModelPct]         = useState(null);
@@ -76,6 +80,18 @@ export default function RecordMeeting({ navigate , user }) {
   const timerRef         = useRef(null);
   const startTimeRef     = useRef(0);
 
+  // The usual meeting type is a setting; start from it.
+  useEffect(() => {
+    getSettings().then((s) => s.default_meeting_type && setMeetingType(s.default_meeting_type)).catch(() => {});
+  }, []);
+
+  // While recording or processing, the tab bar is hidden: one stray tap
+  // should not walk away from a meeting in progress.
+  useEffect(() => {
+    setImmersive(state !== "idle");
+    return () => setImmersive(false);
+  }, [state, setImmersive]);
+
   const cleanup = () => {
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -83,7 +99,7 @@ export default function RecordMeeting({ navigate , user }) {
       liveRecorderRef.current.stop().catch(() => {});
       liveRecorderRef.current = null;
     }
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
     if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
       audioCtxRef.current.close().catch(() => {});
     }
@@ -96,6 +112,13 @@ export default function RecordMeeting({ navigate , user }) {
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [liveSegments.length]);
+
+  const addParticipant = () => {
+    const name = newParticipant.trim();
+    if (!name) return;
+    setParticipants((p) => [...p, name]);
+    setNewParticipant("");
+  };
 
   const startRecording = async () => {
     setError(null);
@@ -123,10 +146,6 @@ export default function RecordMeeting({ navigate , user }) {
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      // ── Live transcription ────────────────────────────────────────────
-      // Stream 20s windows to the backend while recording so the transcript
-      // is already built when the user stops. If the session can't be opened
-      // we silently fall back to the original record-then-transcribe flow.
       setLiveSegments([]);
       liveSegmentsRef.current = [];
       sessionIdRef.current = null;
@@ -168,8 +187,8 @@ export default function RecordMeeting({ navigate , user }) {
         }
       } else {
         setError(
-          "This browser cannot transcribe locally. Recalla needs a recent " +
-          "Chrome, Edge, Firefox or Safari, or the Recalla app."
+          "This browser cannot transcribe on its own. Use a recent Chrome, Edge, " +
+          "Firefox or Safari, or the Recalla app."
         );
         stream.getTracks().forEach((t) => t.stop());
         return;
@@ -180,8 +199,7 @@ export default function RecordMeeting({ navigate , user }) {
       // MediaRecorder only runs as the fallback. When the browser is
       // transcribing, the PCM is already captured through the AudioContext,
       // so a second encoded copy would waste memory — and its onstop would
-      // fire the old upload path alongside the local one, sending audio to
-      // a server that has no speech model.
+      // fire the old upload path alongside the local one.
       if (!live) {
         const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
         chunksRef.current = [];
@@ -202,9 +220,10 @@ export default function RecordMeeting({ navigate , user }) {
         setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }, 1000);
 
-      drawWaveform();
-    } catch (err) {
-      setError("Microphone access denied. Please allow microphone permissions.");
+      // The canvas mounts with the recording view; draw once it exists.
+      requestAnimationFrame(drawWaveform);
+    } catch {
+      setError("Recalla needs the microphone. Allow microphone access and try again.");
     }
   };
 
@@ -213,31 +232,38 @@ export default function RecordMeeting({ navigate , user }) {
     const analyser = analyserRef.current;
     if (!canvas || !analyser) return;
 
+    // Sharp on high-density phone screens.
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
     const ctx = canvas.getContext("2d");
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    // Canvas cannot read CSS variables — resolve the theme colours once.
+    const from = cssColor("danger"), to = cssColor("warn");
 
     const draw = () => {
       animationRef.current = requestAnimationFrame(draw);
-      analyser.getByteFrequencyData(dataArray);
-
-      const w = canvas.width;
-      const h = canvas.height;
+      analyser.getByteFrequencyData(data);
+      const w = canvas.width, h = canvas.height;
       ctx.clearRect(0, 0, w, h);
 
-      const barCount = 64;
-      const barWidth = w / barCount;
-      for (let i = 0; i < barCount; i++) {
-        const val = dataArray[Math.floor(i * dataArray.length / barCount)];
-        const barH = (val / 255) * h * 0.85;
-        const x = i * barWidth;
-        const y = (h - barH) / 2;
-
-        // Gradient bars
-        const gradient = ctx.createLinearGradient(0, y, 0, y + barH);
-        gradient.addColorStop(0, COLORS.emerald);
-        gradient.addColorStop(1, COLORS.cyan);
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x + 1, y, barWidth - 2, barH);
+      const bars = 40;
+      const gap = 3 * dpr;
+      const bw = (w - gap * (bars - 1)) / bars;
+      const grad = ctx.createLinearGradient(0, 0, w, 0);
+      grad.addColorStop(0, from);
+      grad.addColorStop(1, to);
+      ctx.fillStyle = grad;
+      for (let i = 0; i < bars; i++) {
+        const v = data[Math.floor((i * data.length) / bars)] / 255;
+        const bh = Math.max(4 * dpr, v * h * 0.9);
+        const x = i * (bw + gap);
+        const y = (h - bh) / 2;
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(x, y, bw, bh, bw / 2) : ctx.rect(x, y, bw, bh);
+        ctx.fill();
       }
     };
     draw();
@@ -247,7 +273,6 @@ export default function RecordMeeting({ navigate , user }) {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
-
     if (timerRef.current) clearInterval(timerRef.current);
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
 
@@ -272,6 +297,7 @@ export default function RecordMeeting({ navigate , user }) {
     }
     bt.release();
     browserSttRef.current = null;
+    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
 
     setCurrentStep(1);
     setProgress(70);
@@ -308,7 +334,10 @@ export default function RecordMeeting({ navigate , user }) {
         participants,
         meeting_type: meetingType,
       });
-      navigate("meeting", saved.id);
+      setCurrentStep(3);
+      setProgress(100);
+      // Straight to the meeting that was just saved.
+      navigate("detail", { id: saved.id });
     } catch (e) {
       setError(`Could not save the meeting: ${e.message}`);
       setState("idle");
@@ -422,7 +451,6 @@ export default function RecordMeeting({ navigate , user }) {
       const expectedSpeakers = participants.length > 0 ? participants.length : null;
       const result = await transcribeAudio(blob, "recording.webm", onProgress, { expectedSpeakers });
 
-      // Step 4 — Auto-generate AI summary
       setCurrentStep(3);
       setProgress(95);
       let aiSummary = null;
@@ -438,9 +466,7 @@ export default function RecordMeeting({ navigate , user }) {
       setCurrentStep(4);
       setProgress(100);
 
-      // Build meeting from real data
-      const speakers = [...new Set(result.transcript.segments.map(s => s.speaker || "Speaker 1"))];
-
+      const speakers = [...new Set(result.transcript.segments.map((s) => s.speaker || "Speaker 1"))];
       const meeting = {
         id:           Date.now(),
         title:        title || "Untitled Meeting",
@@ -453,13 +479,12 @@ export default function RecordMeeting({ navigate , user }) {
         tags:         result.tagging.auto_tags || [],
         transcript:   result.transcript.segments,
         fullText:     result.transcript.full_text,
-        aiSummary:    aiSummary,
-        keyPoints:    keyPoints,
+        aiSummary,
+        keyPoints,
         tagging:      result.tagging,
       };
 
       setTimeout(() => navigate("detail", meeting), 800);
-
     } catch (err) {
       setError(err.message || "Processing failed");
       setState("idle");
@@ -468,14 +493,16 @@ export default function RecordMeeting({ navigate , user }) {
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
+    e.target.value = "";          // picking the same file again still fires
     if (!file) return;
 
     if (!browserSttSupported()) {
-      setError("This browser cannot transcribe locally. Try Chrome, Edge or Safari.");
+      setError("This browser cannot transcribe on its own. Try Chrome, Edge or Safari.");
       return;
     }
 
     setState("processing");
+    setIsLive(false);
     setProgress(0);
     setCurrentStep(1);
     setError(null);
@@ -484,12 +511,11 @@ export default function RecordMeeting({ navigate , user }) {
 
     try {
       // The same browser worker that handles live recording. Uploading to
-      // the server is not an option: it carries no speech model, and the
-      // file would come back as a 501.
+      // the server is not an option: it carries no speech model.
       const { segments, durationMs } = await transcribeFile(file, {
         onProgress: ({ stage, pct }) => {
           setModelPct(stage === "model" ? pct : null);
-          if (stage === "transcribe") setProgress(Math.max(10, pct * 0.7));
+          if (stage === "transcribe") setProgress(Math.max(10, Math.round(pct * 0.7)));
         },
         onSegments: (segs) =>
           setLiveSegments((prev) => {
@@ -517,6 +543,9 @@ export default function RecordMeeting({ navigate , user }) {
         console.error("Summary failed:", err);
       }
 
+      setCurrentStep(3);
+      setProgress(95);
+
       const saved = await saveMeeting({
         title: title.trim() || file.name.replace(/\.[^.]+$/, ""),
         full_text: fullText,
@@ -527,316 +556,207 @@ export default function RecordMeeting({ navigate , user }) {
         participants,
         meeting_type: meetingType,
       });
-      navigate("meeting", saved.id);
+      navigate("detail", { id: saved.id });
     } catch (err) {
       setError(`Could not transcribe that file: ${err.message}`);
       setState("idle");
     }
   };
 
-  const fmtTime = (s) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
+  // ── Recording: full screen, nothing else to tap ──────────────────────────
+  if (state === "recording") {
+    return (
+      <div className="flex h-full flex-col bg-bg" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+        <div className="flex items-center justify-center gap-2 pt-6 text-sm font-semibold text-danger">
+          <span className="size-2.5 rounded-full bg-danger animate-blink" /> Recording
+        </div>
+        {title && <p className="mt-1 truncate px-6 text-center text-muted">{title}</p>}
 
-  // ── Render based on state ──────────────────────────────────────────────
+        <div className="mt-6 text-center font-mono text-6xl font-medium tracking-tight tabular-nums sm:text-7xl" aria-live="off">
+          {fmtClock(elapsed)}
+        </div>
+
+        <div className="mx-auto mt-6 w-full max-w-md px-6">
+          <canvas ref={canvasRef} className="h-16 w-full" aria-hidden="true" />
+        </div>
+
+        {/* Live transcript */}
+        {isLive && (
+          <div className="mx-auto mt-6 flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4">
+            <div className="mb-2 flex items-center justify-between text-[13px]">
+              <span className="font-semibold text-muted">Live transcript</span>
+              <span className="text-subtle">
+                {modelPct != null && modelPct < 100 ? `Preparing speech model · ${Math.round(modelPct)}%`
+                  : liveQueued > 1 ? `${liveQueued} slices waiting`
+                  : liveSegments.length ? "Keeping up" : "Listening…"}
+              </span>
+            </div>
+            <div className="card min-h-0 flex-1 overflow-y-auto p-4">
+              {liveSegments.length === 0 ? (
+                <p className="py-6 text-center text-[15px] leading-relaxed text-subtle">
+                  The first words appear after about 20 seconds,<br />then keep pace with the meeting.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {liveSegments.map((s, i) => (
+                    <div key={`${s.start}-${i}`} className="flex gap-3 animate-rise">
+                      <span className="w-11 shrink-0 pt-0.5 font-mono text-xs text-subtle">{fmtClock(s.start)}</span>
+                      <span className="text-[15px] leading-relaxed">{s.text}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div ref={transcriptEndRef} />
+            </div>
+            <p className="mt-2 text-center text-xs text-subtle">Speakers are labelled when you stop.</p>
+          </div>
+        )}
+
+        <div className="mt-auto flex flex-col items-center gap-2 pt-6 pb-[calc(28px+env(safe-area-inset-bottom))]">
+          <button onClick={stopRecording} aria-label="Stop and save the recording"
+                  className="grid size-20 place-items-center rounded-full bg-danger text-white shadow-pop ring-8 ring-danger/20 transition-transform active:scale-95">
+            <Square size={28} fill="currentColor" />
+          </button>
+          <span className="text-sm text-muted">Tap to stop and save</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Processing ──────────────────────────────────────────────────────────
+  if (state === "processing") {
+    const steps = isLive ? LIVE_STEPS : PROCESSING_STEPS;
+    return (
+      <div className="flex h-full items-center justify-center bg-bg px-5" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+        <div className="w-full max-w-md animate-rise" role="status" aria-live="polite">
+          <span className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-brand/12 text-brand">
+            <Sparkles size={28} />
+          </span>
+          <h1 className="text-center text-xl font-bold">Making sense of your meeting</h1>
+          <p className="mt-1 text-center text-muted">{title || "Untitled meeting"}</p>
+
+          <div className="mt-6 h-2 overflow-hidden rounded-full bg-surface-3">
+            <div className="h-full rounded-full bg-gradient-to-r from-brand to-info transition-[width] duration-500"
+                 style={{ width: `${Math.round(progress)}%` }} />
+          </div>
+          <p className="mt-1.5 text-right text-xs text-subtle tabular-nums">{Math.round(progress)}%</p>
+
+          <ol className="card mt-4 space-y-1 p-3">
+            {steps.map((step, i) => {
+              const done = i < currentStep, now = i === currentStep;
+              return (
+                <li key={step} className={`flex min-h-10 items-center gap-3 px-1 transition-opacity ${i > currentStep ? "opacity-40" : ""}`}>
+                  <span className={`grid size-6 shrink-0 place-items-center rounded-full
+                    ${done ? "bg-brand text-on-brand" : now ? "bg-warn/15 text-warn" : "bg-surface-3 text-subtle"}`}>
+                    {done ? <Check size={14} strokeWidth={3} /> : now ? <Loader2 size={14} className="animate-spin" /> : <span className="size-1.5 rounded-full bg-current" />}
+                  </span>
+                  <span className={`text-[15px] ${now ? "font-medium" : done ? "text-muted" : ""}`}>{step}</span>
+                </li>
+              );
+            })}
+          </ol>
+          {modelPct != null && modelPct < 100 && (
+            <p className="mt-3 text-center text-sm text-subtle">First time only: preparing the speech model · {Math.round(modelPct)}%</p>
+          )}
+          <p className="mt-4 text-center text-sm text-subtle">Keep this screen open until it finishes.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Idle: one big button, everything else optional ──────────────────────
   return (
-    <>
-      <style>{GLOBAL_CSS}</style>
-      <div style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="record" navigate={navigate} user={user}/>
+    <Screen title="Record" subtitle="Capture a meeting as it happens" width="max-w-xl">
+      {error && <Banner className="mb-5" onClose={() => setError(null)}>{error}</Banner>}
 
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <header style={{
-            padding: "18px 28px", borderBottom: `1px solid ${COLORS.border}`,
-          }}>
-            <div style={{ fontFamily: FONTS.heading, fontSize: 26, lineHeight: 1, textTransform: "uppercase", letterSpacing: "0.02em" }}>
-              Record <span style={{ color: COLORS.emerald }}>Meeting</span>
+      <div className="flex flex-col items-center pt-4 pb-6 text-center sm:pt-8">
+        <button onClick={startRecording} aria-label="Start recording"
+                className="group relative grid size-36 place-items-center rounded-full bg-danger text-white shadow-pop
+                           transition-transform active:scale-95 sm:size-40">
+          <span className="absolute inset-0 rounded-full bg-danger/40 animate-ping-ring" aria-hidden="true" />
+          <span className="absolute -inset-3 rounded-full border-2 border-danger/25" aria-hidden="true" />
+          <Mic size={52} strokeWidth={2} className="relative" />
+        </button>
+        <h2 className="mt-7 text-xl font-bold">Tap to start recording</h2>
+        <p className="mt-1.5 max-w-sm text-[15px] leading-relaxed text-muted">
+          Put your phone on the table. Recalla writes down what's said and tidies it up when you stop.
+        </p>
+
+        <ul className="mt-5 flex flex-wrap justify-center gap-2 text-[13px]">
+          {[
+            { Icon: ShieldCheck, text: "Audio stays on this device" },
+            { Icon: Users, text: "Speakers labelled" },
+            { Icon: Sparkles, text: "Summary when you stop" },
+          ].map(({ Icon, text }) => (
+            <li key={text} className="inline-flex items-center gap-1.5 rounded-full bg-surface-3 px-3 py-1.5 text-muted">
+              <Icon size={14} className="text-brand" /> {text}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Optional details — better speaker labels and titles, never required */}
+      <section className="card overflow-hidden">
+        <button onClick={() => setDetailsOpen((o) => !o)} aria-expanded={detailsOpen}
+                className="flex min-h-14 w-full items-center gap-3 px-4 text-left">
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">Meeting details</span>
+            <span className="block truncate text-[13px] text-subtle">
+              {title || participants.length
+                ? [title, participants.length && `${participants.length} people`].filter(Boolean).join(" · ")
+                : "Optional — a title and who's there"}
+            </span>
+          </span>
+          <ChevronDown size={20} className={`shrink-0 text-subtle transition-transform ${detailsOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {detailsOpen && (
+          <div className="space-y-4 border-t border-line p-4 animate-fade-in">
+            <div>
+              <label className="label" htmlFor="m-title">Title</label>
+              <input id="m-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)}
+                     placeholder="Weekly project sync" />
             </div>
-            <div style={{
-              fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-              marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em",
-              display: "flex", alignItems: "center", gap: 6,
-            }}>
-              <span className="status-dot" style={{
-                background: state === "recording" ? COLORS.red : state === "processing" ? COLORS.amber : COLORS.emerald,
-                animationDuration: state === "recording" ? "0.8s" : "2s",
-              }}/>
-              {state === "idle" && "Ready"}
-              {state === "recording" && `Recording · ${fmtTime(elapsed)}`}
-              {state === "processing" && "Processing..."}
+            <div>
+              <span className="label">Kind of meeting</span>
+              <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+                {MEETING_TYPES.map((t) => (
+                  <button key={t} aria-pressed={meetingType === t} onClick={() => setMeetingType(t)} className="chip">{t}</button>
+                ))}
+              </div>
             </div>
-          </header>
-
-          <div style={{ flex: 1, overflowY: "auto", padding: "32px 28px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ width: "100%", maxWidth: 640 }}>
-
-              {/* ── IDLE STATE ──────────────────────────────────────── */}
-              {state === "idle" && (
-                <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-
-                  {/* Form fields */}
-                  <div className="corners" style={{
-                    background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                    padding: "20px 24px",
-                  }}>
-                    <div style={{ display: "grid", gap: 14 }}>
-                      <div>
-                        <label style={{
-                          display: "block", fontFamily: FONTS.mono, fontSize: 10,
-                          color: COLORS.textSecondary, textTransform: "uppercase",
-                          letterSpacing: "0.1em", marginBottom: 6,
-                        }}>Title</label>
-                        <input
-                          type="text"
-                          value={title}
-                          onChange={e => setTitle(e.target.value)}
-                          placeholder="What's this meeting about?"
-                          style={{
-                            width: "100%", background: COLORS.bg,
-                            border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary,
-                            padding: "10px 14px", fontFamily: FONTS.body, fontSize: 14,
-                            outline: "none",
-                          }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{
-                          display: "block", fontFamily: FONTS.mono, fontSize: 10,
-                          color: COLORS.textSecondary, textTransform: "uppercase",
-                          letterSpacing: "0.1em", marginBottom: 6,
-                        }}>Participants ({participants.length})</label>
-                        <div style={{ display: "flex", gap: 6, marginBottom: participants.length > 0 ? 10 : 0 }}>
-                          <input
-                            type="text"
-                            value={newParticipant}
-                            onChange={e => setNewParticipant(e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter" && newParticipant.trim()) { setParticipants([...participants, newParticipant.trim()]); setNewParticipant(""); } }}
-                            placeholder="Add name + Enter"
-                            style={{
-                              flex: 1, background: COLORS.bg,
-                              border: `1px solid ${COLORS.border}`, color: COLORS.textPrimary,
-                              padding: "10px 14px", fontFamily: FONTS.body, fontSize: 14,
-                              outline: "none",
-                            }}
-                          />
-                        </div>
-                        {participants.length > 0 && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                            {participants.map((p, i) => (
-                              <span key={i} style={{
-                                fontFamily: FONTS.mono, fontSize: 11, padding: "4px 10px",
-                                background: "rgba(167,139,250,0.10)",
-                                border: `1px solid ${COLORS.borderViolet}`,
-                                color: COLORS.violet, borderRadius: 999,
-                                display: "flex", alignItems: "center", gap: 6,
-                              }}>
-                                {p}
-                                <button onClick={() => setParticipants(participants.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: COLORS.violet, cursor: "pointer", padding: 0, fontSize: 14 }}>×</button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Record button */}
-                  <button
-                    onClick={startRecording}
-                    style={{
-                      background: `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})`,
-                      color: COLORS.bg, border: "none",
-                      padding: "32px", fontFamily: FONTS.heading, fontSize: 38,
-                      textTransform: "uppercase", letterSpacing: "0.02em", cursor: "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "center", gap: 14,
-                      boxShadow: COLORS.glow.emerald,
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10a7 7 0 0 0 14 0" fill="none" stroke="currentColor" strokeWidth="2"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="2"/></svg>
-                    Start Recording
-                  </button>
-
-                  {/* Or upload */}
-                  <label style={{
-                    background: "transparent", border: `1px dashed ${COLORS.border}`,
-                    color: COLORS.textSecondary, padding: "16px",
-                    fontFamily: FONTS.mono, fontSize: 12,
-                    textTransform: "uppercase", letterSpacing: "0.1em",
-                    cursor: "pointer", textAlign: "center", display: "block",
-                  }}>
-                    Or upload audio file
-                    <input type="file" accept="audio/*" onChange={handleFileUpload} style={{ display: "none" }}/>
-                  </label>
-
-                  {error && (
-                    <div style={{
-                      padding: "12px 16px", background: "rgba(248,113,113,0.10)",
-                      border: `1px solid rgba(248,113,113,0.3)`, color: COLORS.red,
-                      fontFamily: FONTS.mono, fontSize: 12,
-                    }}>
-                      {error}
-                    </div>
-                  )}
+            <div>
+              <label className="label" htmlFor="m-person">Who's there</label>
+              <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); addParticipant(); }}>
+                <input id="m-person" className="input" value={newParticipant} enterKeyHint="done"
+                       onChange={(e) => setNewParticipant(e.target.value)} placeholder="Add a name" />
+                <button type="submit" className="btn btn-secondary px-3" aria-label="Add person" disabled={!newParticipant.trim()}>
+                  <UserPlus size={18} />
+                </button>
+              </form>
+              {participants.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {participants.map((p, i) => (
+                    <span key={`${p}-${i}`} className="inline-flex items-center gap-1 rounded-full bg-ai/12 py-1 pr-1 pl-3 text-sm font-medium text-ai">
+                      {p}
+                      <button onClick={() => setParticipants(participants.filter((_, idx) => idx !== i))}
+                              aria-label={`Remove ${p}`} className="grid size-6 place-items-center rounded-full hover:bg-ai/20">
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))}
                 </div>
               )}
-
-              {/* ── RECORDING STATE ──────────────────────────────────────── */}
-              {state === "recording" && (
-                <div className="fade-up corners corners-emerald" style={{
-                  background: COLORS.surface, border: `1px solid ${COLORS.borderEmerald}`,
-                  padding: "40px 32px", textAlign: "center",
-                }}>
-                  <div style={{
-                    fontFamily: FONTS.mono, fontSize: 10, color: COLORS.red,
-                    textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 12,
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  }}>
-                    <span className="status-dot" style={{ background: COLORS.red, animationDuration: "0.8s" }}/>
-                    Recording
-                  </div>
-
-                  <div style={{ fontFamily: FONTS.heading, fontSize: 80, lineHeight: 1, color: COLORS.emerald, marginBottom: 24 }}>
-                    {fmtTime(elapsed)}
-                  </div>
-
-                  <canvas ref={canvasRef} width="500" height="80" style={{ width: "100%", maxWidth: 500, marginBottom: 28, display: "block", margin: "0 auto 28px" }}/>
-
-                  <button
-                    onClick={stopRecording}
-                    className="press"
-                    style={{
-                      background: COLORS.red, color: COLORS.onAccent, border: "none",
-                      padding: "12px 32px", fontFamily: FONTS.mono, fontSize: 12, fontWeight: 600,
-                      textTransform: "uppercase", letterSpacing: "0.1em", cursor: "pointer",
-                      borderRadius: 999,
-                    }}
-                  >
-                    Stop Recording
-                  </button>
-
-                  {/* ── Live transcript ─────────────────────────────────── */}
-                  {isLive && (
-                    <div style={{ marginTop: 30, textAlign: "left" }}>
-                      <div style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        fontFamily: FONTS.mono, fontSize: 10, letterSpacing: "0.12em",
-                        textTransform: "uppercase", color: COLORS.textSecondary, marginBottom: 10,
-                      }}>
-                        <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                          <span className="status-dot" style={{ background: COLORS.cyan }} />
-                          Live transcript
-                        </span>
-                        <span style={{ color: liveLag > 1 ? COLORS.amber : COLORS.textTertiary }}>
-                          {liveLag > 1
-                            ? `Falling behind ${liveLag.toFixed(1)}x`
-                            : liveSegments.length > 0 ? "Keeping up" : "Listening…"}
-                          {liveQueued > 1 ? ` · ${liveQueued} queued` : ""}
-                        </span>
-                      </div>
-
-                      <div style={{
-                        maxHeight: 240, overflowY: "auto",
-                        background: COLORS.bg, border: `1px solid ${COLORS.border}`,
-                        borderRadius: 12, padding: "14px 16px",
-                        display: "flex", flexDirection: "column", gap: 10,
-                      }}>
-                        {liveSegments.length === 0 ? (
-                          <div style={{
-                            fontSize: 13, color: COLORS.textTertiary, textAlign: "center",
-                            padding: "18px 0", lineHeight: 1.6,
-                          }}>
-                            First words appear after about 20 seconds,<br />
-                            then keep up with the meeting.
-                          </div>
-                        ) : (
-                          liveSegments.map((s, i) => (
-                            <div key={`${s.start}-${i}`} className="fade-up" style={{ display: "flex", gap: 10 }}>
-                              <span style={{
-                                fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textTertiary,
-                                minWidth: 42, paddingTop: 2, flexShrink: 0,
-                              }}>
-                                {fmtTime(Math.floor(s.start))}
-                              </span>
-                              <span style={{ fontSize: 13.5, lineHeight: 1.55, color: COLORS.textPrimary }}>
-                                {s.text}
-                              </span>
-                            </div>
-                          ))
-                        )}
-                        <div ref={transcriptEndRef} />
-                      </div>
-
-                      <div style={{
-                        marginTop: 8, fontFamily: FONTS.mono, fontSize: 9.5,
-                        color: COLORS.textTertiary, letterSpacing: "0.08em", textTransform: "uppercase",
-                      }}>
-                        Speakers are identified when you stop
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ── PROCESSING STATE ──────────────────────────────────────── */}
-              {state === "processing" && (
-                <div className="fade-up corners" style={{
-                  background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                  padding: "40px 32px",
-                }}>
-                  <div style={{
-                    fontFamily: FONTS.mono, fontSize: 10, color: COLORS.amber,
-                    textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 8,
-                    display: "flex", alignItems: "center", gap: 8,
-                  }}>
-                    <span className="status-dot" style={{ background: COLORS.amber, animationDuration: "0.6s" }}/>
-                    Processing
-                  </div>
-                  <div style={{ fontFamily: FONTS.heading, fontSize: 38, lineHeight: 1, marginBottom: 28, textTransform: "uppercase" }}>
-                    {title || "Untitled"}
-                  </div>
-
-                  {/* Progress bar */}
-                  <div style={{ height: 6, background: COLORS.surfaceRaised, marginBottom: 8 }}>
-                    <div style={{
-                      height: "100%", width: `${progress}%`,
-                      background: `linear-gradient(90deg, ${COLORS.emerald}, ${COLORS.cyan})`,
-                      transition: "width 0.5s",
-                    }}/>
-                  </div>
-                  <div style={{
-                    fontFamily: FONTS.mono, fontSize: 11, color: COLORS.textSecondary,
-                    textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 28,
-                  }}>
-                    {progress}%
-                  </div>
-
-                  {/* Steps */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {(isLive ? LIVE_STEPS : PROCESSING_STEPS).map((step, i) => (
-                      <div key={i} style={{
-                        display: "flex", alignItems: "center", gap: 12,
-                        opacity: i <= currentStep ? 1 : 0.35,
-                        transition: "opacity 0.3s",
-                      }}>
-                        <span className="status-dot" style={{
-                          background: i < currentStep ? COLORS.emerald : i === currentStep ? COLORS.amber : COLORS.textTertiary,
-                          animationDuration: i === currentStep ? "0.6s" : "2s",
-                        }}/>
-                        <span style={{
-                          fontFamily: FONTS.body, fontSize: 14,
-                          color: i < currentStep ? COLORS.emerald : i === currentStep ? COLORS.textPrimary : COLORS.textSecondary,
-                        }}>
-                          {step}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
+              <p className="mt-2 text-[13px] text-subtle">Knowing how many people are talking helps Recalla tell voices apart.</p>
             </div>
           </div>
-        </main>
-      </div>
-    </>
+        )}
+      </section>
+
+      <label className="btn btn-ghost mt-3 w-full border border-dashed border-line-strong">
+        <Upload size={18} /> Upload a recording instead
+        <input type="file" accept="audio/*" onChange={handleFileUpload} className="sr-only" />
+      </label>
+    </Screen>
   );
 }

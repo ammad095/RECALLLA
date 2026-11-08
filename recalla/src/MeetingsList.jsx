@@ -1,210 +1,124 @@
 // ============================================================
 // FILE PATH:  recalla/src/MeetingsList.jsx
-// PURPOSE:    Browse all meetings. Simple search + list, no grid view.
+// PURPOSE:    Every recorded meeting, newest first, searchable.
 // ============================================================
 
-import { useState, useEffect } from "react";
-import { COLORS, FONTS, GLOBAL_CSS } from "./theme";
-import Sidebar from "./Sidebar";
+import { useState, useEffect, useMemo } from "react";
+import { Search, Plus, AudioLines, Trash2, Users, Clock, ChevronRight, X } from "lucide-react";
 import { listMeetings, deleteMeeting } from "./data_api";
 import { fmtWhen, fmtDuration } from "./format";
+import { Screen, EmptyState, Banner, SkeletonList } from "./ui/kit";
+import { useConfirm } from "./ui/useConfirm";
 
-export default function MeetingsList({ navigate, user }) {
+export default function MeetingsList({ navigate }) {
   const [search, setSearch]     = useState("");
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => {
     let alive = true;
-    (async () => {
-      try {
-        const rows = await listMeetings();
-        if (alive) { setMeetings(rows); setError(null); }
-      } catch (e) {
-        if (alive) setError(e.message);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
+    listMeetings()
+      .then((rows) => { if (alive) { setMeetings(rows); setError(null); } })
+      .catch((e) => alive && setError(e.message))
+      .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, []);
 
-  const remove = async (e, id) => {
+  const remove = async (e, m) => {
     e.stopPropagation();
-    if (!window.confirm("Delete this meeting? This cannot be undone.")) return;
+    const ok = await confirm({
+      title: "Delete this meeting?",
+      body: `“${m.title}” and its transcript will be removed for good.`,
+      action: "Delete",
+    });
+    if (!ok) return;
     try {
-      await deleteMeeting(id);
-      setMeetings((prev) => prev.filter((m) => m.id !== id));
+      await deleteMeeting(m.id);
+      setMeetings((prev) => prev.filter((x) => x.id !== m.id));
     } catch (err) { setError(err.message); }
   };
 
-  const q = search.toLowerCase();
-  const filtered = meetings.filter((m) =>
+  const q = search.trim().toLowerCase();
+  const filtered = useMemo(() => meetings.filter((m) =>
     !q || m.title.toLowerCase().includes(q) || (m.tags || []).some((t) => t.toLowerCase().includes(q))
-  );
+  ), [meetings, q]);
 
   return (
-    <>
-      <style>{GLOBAL_CSS}</style>
-      <div style={{ display: "flex", height: "100vh", width: "100vw", background: COLORS.bg }}>
-        <Sidebar active="meetings" navigate={navigate} user={user}/>
-
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {/* Header */}
-          <header style={{
-            padding: "18px 28px", borderBottom: `1px solid ${COLORS.border}`,
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-          }}>
-            <div>
-              <div style={{ fontFamily: FONTS.heading, fontSize: 26, lineHeight: 1, textTransform: "uppercase", letterSpacing: "0.02em" }}>
-                Meetings
-              </div>
-              <div style={{
-                fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-                marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em",
-              }}>
-                {loading ? "Loading…" : `${filtered.length} of ${meetings.length} meetings`}
-              </div>
-            </div>
-
-            <button
-              onClick={() => navigate("record")}
-              style={{
-                background: `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})`,
-                color: COLORS.onAccent, border: "none", padding: "9px 18px",
-                fontFamily: FONTS.mono, fontSize: 11, fontWeight: 600,
-                textTransform: "uppercase", letterSpacing: "0.1em",
-                cursor: "pointer", borderRadius: 999,
-              }}
-            >
-              + Record
+    <Screen
+      title="Meetings"
+      subtitle={loading ? "Loading…" : `${meetings.length} recorded`}
+      actions={
+        <button className="btn btn-primary btn-sm" onClick={() => navigate("record")}>
+          <Plus size={17} /> <span className="hidden sm:inline">Record</span><span className="sm:hidden">New</span>
+        </button>
+      }
+    >
+      {meetings.length > 0 && (
+        <label className="relative mb-4 block">
+          <Search size={18} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-subtle" />
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+                 placeholder="Search titles and topics" aria-label="Search meetings"
+                 className="input pr-10 pl-10" />
+          {search && (
+            <button onClick={() => setSearch("")} aria-label="Clear search"
+                    className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-subtle hover:text-fg">
+              <X size={16} />
             </button>
-          </header>
+          )}
+        </label>
+      )}
 
-          {/* Search bar */}
-          <div style={{ padding: "20px 28px 0" }}>
-            <div style={{ maxWidth: 760, margin: "0 auto" }}>
-              <div className="corners" style={{
-                background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                padding: "10px 16px", display: "flex", alignItems: "center", gap: 10,
-              }}>
-                <svg viewBox="0 0 24 24" width="16" height="16" stroke={COLORS.textTertiary} strokeWidth="2" fill="none">
-                  <circle cx="11" cy="11" r="8"/>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search by title or tag..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  style={{
-                    flex: 1, background: "transparent", border: "none", outline: "none",
-                    color: COLORS.textPrimary, fontFamily: FONTS.body, fontSize: 14,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+      {error && <Banner className="mb-4" onClose={() => setError(null)}>{error}</Banner>}
 
-          {/* List */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px 40px" }}>
-            <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: 10 }}>
-              {error && (
-                <div style={{
-                  padding: "12px 16px", borderRadius: 10, marginBottom: 4,
-                  background: COLORS.surface, border: `1px solid ${COLORS.red}`,
-                  color: COLORS.red, fontFamily: FONTS.mono, fontSize: 11,
-                }}>{error}</div>
-              )}
-
-              {loading ? (
-                [0,1,2].map(i => <div key={i} className="skeleton" style={{ height: 74, borderRadius: 14 }}/>)
-              ) : filtered.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "56px 20px" }}>
-                  <div style={{ fontFamily: FONTS.heading, fontSize: 26, marginBottom: 10, color: COLORS.textPrimary }}>
-                    {meetings.length === 0 ? "No meetings yet" : "Nothing matches that search"}
-                  </div>
-                  <div style={{ fontSize: 14, color: COLORS.textSecondary, marginBottom: 22, lineHeight: 1.6 }}>
-                    {meetings.length === 0
-                      ? "Record your first meeting and it will appear here."
-                      : "Try a different title or tag."}
-                  </div>
-                  {meetings.length === 0 && (
-                    <button onClick={() => navigate("record")} className="press" style={{
-                      background: `linear-gradient(135deg, ${COLORS.emerald}, ${COLORS.cyan})`,
-                      color: COLORS.onAccent, border: "none", padding: "11px 22px",
-                      fontFamily: FONTS.mono, fontSize: 11, fontWeight: 600,
-                      textTransform: "uppercase", letterSpacing: "0.1em",
-                      cursor: "pointer", borderRadius: 999,
-                    }}>Record a meeting</button>
-                  )}
-                </div>
-              ) : filtered.map(m => (
-                <div
-                  key={m.id}
-                  onClick={() => navigate("detail", m)}
-                  className="corners"
-                  style={{
-                    background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                    padding: "16px 20px", cursor: "pointer", transition: "all 0.2s",
-                    display: "flex", alignItems: "center", gap: 16,
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = COLORS.borderEmerald; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = COLORS.border; }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 6 }}>{m.title}</div>
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 12,
-                      fontFamily: FONTS.mono, fontSize: 10, color: COLORS.textSecondary,
-                      textTransform: "uppercase", letterSpacing: "0.08em",
-                    }}>
+      {loading ? <SkeletonList count={4} h="h-[84px]" /> : filtered.length === 0 ? (
+        meetings.length === 0 ? (
+          <EmptyState icon={AudioLines} title="No meetings yet"
+            body="Record your first meeting. Recalla will write the transcript and summary, and remember it for later."
+            action={<button className="btn btn-primary" onClick={() => navigate("record")}><Plus size={18} /> Record a meeting</button>} />
+        ) : (
+          <EmptyState icon={Search} tone="muted" title="No matches"
+            body={`Nothing called “${search}”. Try another word, or ask Recalla — it searches what was said, too.`} />
+        )
+      ) : (
+        <ul className="space-y-2.5">
+          {filtered.map((m, i) => {
+            const speakers = (m.speakers || []).length || 1;
+            return (
+              <li key={m.id} className="animate-rise" style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}>
+                <div role="button" tabIndex={0}
+                     onClick={() => navigate("detail", m)}
+                     onKeyDown={(e) => e.key === "Enter" && navigate("detail", m)}
+                     className="card-tap group flex w-full items-start gap-3 p-3.5 sm:p-4">
+                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand/12 text-brand">
+                    <AudioLines size={20} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold leading-snug">{m.title}</span>
+                    <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-subtle">
                       <span>{fmtWhen(m.started_at)}</span>
-                      <span style={{ color: COLORS.textTertiary }}>·</span>
-                      <span>{fmtDuration(m.duration_seconds)}</span>
-                      <span style={{ color: COLORS.textTertiary }}>·</span>
-                      <span>{(m.speakers || []).length || 1} speaker{((m.speakers || []).length || 1) !== 1 ? "s" : ""}</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", maxWidth: 220, justifyContent: "flex-end" }}>
-                    {(m.tags || []).map(t => (
-                      <span key={t} style={{
-                        fontFamily: FONTS.mono, fontSize: 9, padding: "3px 8px",
-                        background: "rgba(52,211,153,0.10)",
-                        border: `1px solid ${COLORS.borderEmerald}`,
-                        color: COLORS.emerald, borderRadius: 999,
-                        textTransform: "uppercase", letterSpacing: "0.08em",
-                      }}>{t}</span>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={(e) => remove(e, m.id)}
-                    title="Delete meeting"
-                    style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      color: COLORS.textTertiary, padding: 4, display: "flex", borderRadius: 6,
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = COLORS.red; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = COLORS.textTertiary; }}
-                  >
-                    <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round">
-                      <polyline points="3 6 5 6 21 6"/>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                    </svg>
+                      <span className="inline-flex items-center gap-1"><Clock size={13} />{fmtDuration(m.duration_seconds)}</span>
+                      <span className="inline-flex items-center gap-1"><Users size={13} />{speakers}</span>
+                    </span>
+                    {m.tags?.length > 0 && (
+                      <span className="mt-2 flex flex-wrap gap-1.5">
+                        {m.tags.slice(0, 4).map((t) => <span key={t} className="tag">{t}</span>)}
+                      </span>
+                    )}
+                  </span>
+                  <button onClick={(e) => remove(e, m)} aria-label={`Delete ${m.title}`}
+                          className="icon-btn -my-1 -mr-1.5 size-10 text-subtle hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100">
+                    <Trash2 size={18} />
                   </button>
-
-                  <svg viewBox="0 0 24 24" width="14" height="14" stroke={COLORS.textTertiary} strokeWidth="2" fill="none" strokeLinecap="round">
-                    <polyline points="9 18 15 12 9 6"/>
-                  </svg>
+                  <ChevronRight size={18} className="mt-3 hidden shrink-0 text-subtle sm:block" />
                 </div>
-              ))}
-            </div>
-          </div>
-        </main>
-      </div>
-    </>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {confirmDialog}
+    </Screen>
   );
 }
