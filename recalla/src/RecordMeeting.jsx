@@ -241,7 +241,7 @@ export default function RecordMeeting({ navigate }) {
     const ctx = canvas.getContext("2d");
     const data = new Uint8Array(analyser.frequencyBinCount);
     // Canvas cannot read CSS variables — resolve the theme colours once.
-    const from = cssColor("danger"), to = cssColor("warn");
+    const from = cssColor("rec-from"), to = cssColor("rec-to");
 
     const draw = () => {
       animationRef.current = requestAnimationFrame(draw);
@@ -566,7 +566,7 @@ export default function RecordMeeting({ navigate }) {
   // ── Recording: full screen, nothing else to tap ──────────────────────────
   if (state === "recording") {
     return (
-      <div className="flex h-full flex-col bg-bg" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      <div className="flex h-full flex-col" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="flex items-center justify-center gap-2 pt-6 text-sm font-semibold text-danger">
           <span className="size-2.5 rounded-full bg-danger animate-blink" /> Recording
         </div>
@@ -614,7 +614,7 @@ export default function RecordMeeting({ navigate }) {
 
         <div className="mt-auto flex flex-col items-center gap-2 pt-6 pb-[calc(28px+env(safe-area-inset-bottom))]">
           <button onClick={stopRecording} aria-label="Stop and save the recording"
-                  className="grid size-20 place-items-center rounded-full bg-danger text-white shadow-pop ring-8 ring-danger/20 transition-transform active:scale-95">
+                  className="bg-rec grid size-20 place-items-center rounded-full text-white shadow-pop ring-8 ring-danger/20 transition-[scale] duration-200 hover:scale-105 active:scale-95">
             <Square size={28} fill="currentColor" />
           </button>
           <span className="text-sm text-muted">Tap to stop and save</span>
@@ -627,7 +627,7 @@ export default function RecordMeeting({ navigate }) {
   if (state === "processing") {
     const steps = isLive ? LIVE_STEPS : PROCESSING_STEPS;
     return (
-      <div className="flex h-full items-center justify-center bg-bg px-5" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      <div className="flex h-full items-center justify-center px-5" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="w-full max-w-md animate-rise" role="status" aria-live="polite">
           <span className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-brand/12 text-brand">
             <Sparkles size={28} />
@@ -671,11 +671,11 @@ export default function RecordMeeting({ navigate }) {
 
       <div className="flex flex-col items-center pt-4 pb-6 text-center sm:pt-8">
         <button onClick={startRecording} aria-label="Start recording"
-                className="group relative grid size-36 place-items-center rounded-full bg-danger text-white shadow-pop
-                           transition-transform active:scale-95 sm:size-40">
+                className="bg-rec group relative grid size-36 place-items-center rounded-full text-white shadow-pop
+                           transition-[scale,box-shadow] duration-300 hover:scale-105 active:scale-95 sm:size-40">
           <span className="absolute inset-0 rounded-full bg-danger/40 animate-ping-ring" aria-hidden="true" />
           <span className="absolute -inset-3 rounded-full border-2 border-danger/25" aria-hidden="true" />
-          <Mic size={52} strokeWidth={2} className="relative" />
+          <Mic size={52} strokeWidth={2} className="relative transition-transform duration-300 group-hover:scale-110" />
         </button>
         <h2 className="mt-7 text-xl font-bold">Tap to start recording</h2>
         <p className="mt-1.5 max-w-sm text-[15px] leading-relaxed text-muted">

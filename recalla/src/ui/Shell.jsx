@@ -14,7 +14,7 @@ import { listNotifications } from "../data_api";
 import { useTheme } from "../useTheme";
 import { Avatar, Sheet } from "./kit";
 import { ShellCtx } from "./shellContext";
-import Logo from "./Logo";
+import { Brand } from "./Logo";
 
 // What each place is for, in the user's words. Shown in the More sheet so the
 // app explains itself without a tour.
@@ -56,7 +56,7 @@ export default function Shell({ page, navigate, user, children }) {
 
   return (
     <ShellCtx.Provider value={ctx}>
-      <div className="flex h-dvh w-full overflow-hidden bg-bg">
+      <div className="flex h-dvh w-full overflow-hidden">
         {!immersive && <Sidebar page={page} go={go} user={user} unread={unread} />}
 
         <main className="relative min-w-0 flex-1">{children}</main>
@@ -92,7 +92,7 @@ function useUnreadReminders() {
 function Badge({ n, className = "" }) {
   if (!n) return null;
   return (
-    <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger px-1 text-[11px] font-bold leading-none text-white tabular-nums ${className}`}
+    <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger-fill px-1 text-[11px] font-bold leading-none text-white tabular-nums ${className}`}
           aria-label={`${n} due`}>
       {n > 9 ? "9+" : n}
     </span>
@@ -118,8 +118,8 @@ function TabItem({ id, label, Icon, active, onClick, badge }) {
 function BottomNav({ active, go, unread, onMore }) {
   return (
     <nav aria-label="Main"
-         className="fixed inset-x-0 bottom-0 z-30 border-t border-line backdrop-blur-xl lg:hidden"
-         style={{ background: "var(--glass)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+         className="glass-bar fixed inset-x-0 bottom-0 z-30 border-t border-line lg:hidden"
+         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
       <div className="mx-auto flex max-w-lg items-end px-1">
         <TabItem id="dashboard" label="Home" Icon={House} active={active} onClick={() => go("dashboard")} />
         <TabItem id="meetings" label="Meetings" Icon={AudioLines} active={active} onClick={() => go("meetings")} />
@@ -128,8 +128,8 @@ function BottomNav({ active, go, unread, onMore }) {
         <div className="flex flex-1 justify-center">
           <button onClick={() => go("record")} aria-label="Record a meeting"
                   aria-current={active === "record" ? "page" : undefined}
-                  className="-mt-5 mb-1 grid size-14 place-items-center rounded-full bg-danger text-white shadow-pop
-                             ring-4 ring-bg transition-transform active:scale-95">
+                  className="bg-rec -mt-5 mb-1 grid size-14 place-items-center rounded-full text-white shadow-pop
+                             ring-4 ring-white/10 transition-[scale,box-shadow] duration-200 hover:scale-105 active:scale-95">
             <Mic size={26} strokeWidth={2.2} />
           </button>
         </div>
@@ -194,9 +194,14 @@ function SideLink({ id, active, go, unread }) {
   const on = active === id;
   return (
     <button onClick={() => go(id)} aria-current={on ? "page" : undefined}
-            className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-[15px] font-medium transition-colors
-                        ${on ? "bg-surface-3 text-fg" : "text-muted hover:bg-surface-2 hover:text-fg"}`}>
-      <p.icon size={19} className={on ? "text-brand" : ""} />
+            className={`group/link relative flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-[15px] font-medium
+                        transition-[background-color,color,translate] duration-200
+                        ${on ? "bg-surface-2 text-fg shadow-[inset_0_1px_0_var(--glass-hi)]"
+                             : "text-muted hover:translate-x-1 hover:bg-surface hover:text-fg"}`}>
+      {/* active marker: a short glowing bar on the left edge */}
+      <span className={`absolute top-1/2 left-0 h-5 w-1 -translate-y-1/2 rounded-full bg-brand transition-opacity duration-200
+                        shadow-[0_0_12px_var(--brand)] ${on ? "opacity-100" : "opacity-0"}`} />
+      <p.icon size={19} className={`transition-[color,scale] duration-200 group-hover/link:scale-110 ${on ? "text-brand" : ""}`} />
       <span className="flex-1 text-left">{p.label}</span>
       {id === "reminders" && <Badge n={unread} />}
     </button>
@@ -208,23 +213,12 @@ function Sidebar({ page, go, user, unread }) {
   const link = { active: page === "detail" ? "meetings" : page, go, unread };
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-surface lg:flex">
-      <button onClick={() => go("dashboard")} className="flex items-center gap-2.5 px-5 pt-6 pb-5 text-left">
-        <Logo size={34} />
-        <span>
-          <span className="block text-[17px] font-bold leading-tight">Recalla</span>
-          <span className="block text-xs text-subtle">Your meeting memory</span>
-        </span>
-      </button>
+    <aside className="glass-panel hidden w-64 shrink-0 flex-col border-r border-line lg:flex">
+      <Brand size={38} onClick={() => go("dashboard")} className="px-5 pt-6 pb-6" />
 
-      <div className="px-3">
-        <button onClick={() => go("record")} className="btn btn-danger w-full">
-          <Mic size={18} /> Record meeting
-        </button>
-      </div>
-
-      <nav aria-label="Main" className="mt-5 flex-1 space-y-0.5 overflow-y-auto px-3">
-        <SideLink id="dashboard" {...link} /><SideLink id="meetings" {...link} /><SideLink id="ask" {...link} />
+      <nav aria-label="Main" className="flex-1 space-y-0.5 overflow-y-auto px-3">
+        <SideLink id="dashboard" {...link} /><SideLink id="record" {...link} />
+        <SideLink id="meetings" {...link} /><SideLink id="ask" {...link} />
         <div className="eyebrow px-3 pt-5 pb-2">Your memory</div>
         <SideLink id="reminders" {...link} /><SideLink id="memory" {...link} /><SideLink id="timeline" {...link} />
         <div className="eyebrow px-3 pt-5 pb-2">Account</div>

@@ -203,7 +203,7 @@ export default function MeetingDetail({ navigate, meeting }) {
         {(M.tags || M.tagging?.auto_tags || []).slice(0, 3).map((t) => <span key={t} className="tag py-1">{t}</span>)}
       </div>
 
-      <div className="sticky top-0 z-10 -mx-4 mb-5 bg-bg/95 px-2 backdrop-blur sm:mx-0 sm:px-0">
+      <div className="glass-bar sticky top-0 z-10 -mx-4 mb-5 px-2 sm:mx-0 sm:px-0">
         <Tabs value={tab} onChange={setTab} options={[
           { value: "summary", label: "Summary" },
           { value: "actions", label: "Tasks & decisions", count: tasks.length + decisions.length },

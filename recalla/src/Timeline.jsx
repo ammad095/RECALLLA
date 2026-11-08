@@ -72,7 +72,7 @@ export default function Timeline({ navigate }) {
       ) : (
         Object.entries(groups).map(([day, list]) => (
           <section key={day} className="mb-6">
-            <h2 className="sticky top-0 z-10 -mx-4 mb-2 bg-bg/90 px-4 py-1.5 text-sm font-semibold text-muted backdrop-blur sm:mx-0 sm:px-0">
+            <h2 className="sticky top-0 z-10 -mx-4 mb-2 glass-bar px-4 py-1.5 text-sm font-semibold text-muted rounded-lg sm:mx-0 sm:px-0">
               {day}
             </h2>
             <ol className="relative ml-5 border-l border-line">

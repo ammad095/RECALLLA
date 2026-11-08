@@ -20,8 +20,8 @@ export function Screen({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="sticky top-0 z-20 border-b border-line backdrop-blur-xl"
-              style={{ background: "var(--glass)", paddingTop: "env(safe-area-inset-top)" }}>
+      <header className="glass-bar sticky top-0 z-20 border-b border-line"
+              style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className={`mx-auto flex min-h-14 w-full items-center gap-1 px-2 sm:px-4 ${width}`}>
           {onBack ? (
             <button className="icon-btn -ml-1" onClick={onBack} aria-label="Back">
@@ -201,8 +201,8 @@ export function Sheet({ open, onClose, title, children, labelledBy }) {
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
       <div className="absolute inset-0 animate-fade-in" style={{ background: "var(--scrim)" }} onClick={onClose} />
       <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={labelledBy}
-           className="relative max-h-[88dvh] w-full overflow-y-auto rounded-t-3xl border border-line bg-surface p-5 pb-[calc(20px+env(safe-area-inset-bottom))]
-                      shadow-pop outline-none animate-sheet-in sm:max-w-md sm:rounded-3xl sm:pb-5">
+           className="relative max-h-[88dvh] w-full overflow-y-auto glass-panel rounded-t-3xl border border-line p-5 pb-[calc(20px+env(safe-area-inset-bottom))]
+                      outline-none animate-sheet-in sm:max-w-md sm:rounded-3xl sm:pb-5">
         <div className="mx-auto -mt-2 mb-3 h-1 w-10 rounded-full bg-line-strong sm:hidden" />
         {title && <h2 id={labelledBy} className="mb-3 text-lg font-semibold">{title}</h2>}
         {children}

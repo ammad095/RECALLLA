@@ -144,7 +144,7 @@ const Message = ({ msg }) => {
   if (msg.role === "user") {
     return (
       <div className="mb-4 flex justify-end animate-rise">
-        <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-ai px-4 py-2.5 text-[15px] leading-relaxed text-white whitespace-pre-wrap break-words">
+        <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-ai-fill px-4 py-2.5 text-[15px] leading-relaxed text-white whitespace-pre-wrap break-words">
           {msg.content}
         </div>
       </div>
@@ -321,7 +321,7 @@ export default function AskRecalla() {
   return (
     <div className="flex h-full">
       {/* Wide screens: past chats alongside */}
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-line bg-surface xl:flex">
+      <aside className="glass-panel hidden w-72 shrink-0 flex-col border-r border-line xl:flex">
         <div className="p-3">
           <button onClick={newSession} className="btn btn-secondary w-full"><Plus size={18} /> New chat</button>
         </div>
@@ -375,9 +375,9 @@ export default function AskRecalla() {
           </div>
 
           {/* Composer: sits above the phone tab bar */}
-          <div className="border-t border-line bg-bg/95 px-3 pt-2.5 pb-[calc(84px+env(safe-area-inset-bottom))] backdrop-blur lg:pb-4">
+          <div className="glass-bar border-t border-line px-3 pt-2.5 pb-[calc(84px+env(safe-area-inset-bottom))] backdrop-blur lg:pb-4">
             <form className="mx-auto flex max-w-3xl items-end gap-2" onSubmit={(e) => { e.preventDefault(); sendMessage(); }}>
-              <div className="flex min-w-0 flex-1 items-end rounded-3xl border border-line bg-surface py-1 pr-1 pl-4 focus-within:border-ai">
+              <div className="flex min-w-0 flex-1 items-end rounded-3xl border border-line bg-surface-2 py-1 pr-1 pl-4 focus-within:border-ai">
                 <textarea
                   ref={inputRef}
                   rows={1}
@@ -396,7 +396,7 @@ export default function AskRecalla() {
                            level={voice.level} onClick={voice.toggle} size={40} />
               </div>
               <button type="submit" disabled={loading || !input.trim()} aria-label="Send"
-                      className="grid size-12 shrink-0 place-items-center rounded-full bg-ai text-white transition-opacity disabled:opacity-30">
+                      className="grid size-12 shrink-0 place-items-center rounded-full bg-ai-fill text-white transition-[opacity,scale] hover:scale-105 disabled:opacity-30">
                 <ArrowUp size={22} strokeWidth={2.4} />
               </button>
             </form>

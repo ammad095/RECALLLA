@@ -78,13 +78,22 @@ export default function RecallaDashboard({ navigate, user }) {
   return (
     <Screen
       width="max-w-5xl"
-      title={<span className="flex items-center gap-2"><span className="lg:hidden"><Logo size={26} /></span>Recalla</span>}
-      subtitle={<span className="inline-flex items-center gap-1.5"><span className={`size-1.5 rounded-full ${statusDot}`} />{statusText}</span>}
+      // Phones show the brand here; on wide screens the sidebar already does.
+      title={<>
+        <span className="brand group flex items-center gap-2.5 lg:hidden">
+          <Logo size={30} /><span className="brand-name">Recalla</span>
+        </span>
+        <span className="hidden lg:inline">Home</span>
+      </>}
+      subtitle={<span className="lg:hidden">Every meeting, remembered.</span>}
     >
       {/* ── Greeting + what this is ─────────────────────────────────────── */}
       <section className="mb-5 animate-rise">
-        <p className="text-sm text-subtle">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-subtle">
           {new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-medium">
+            <span className={`size-1.5 rounded-full ${statusDot}`} />{statusText}
+          </span>
         </p>
         <h2 className="mt-0.5 text-[26px] font-bold leading-tight tracking-tight sm:text-3xl">
           {greeting}, {(user?.name || "there").split(" ")[0]}
@@ -98,10 +107,10 @@ export default function RecallaDashboard({ navigate, user }) {
       {/* ── The two jobs: record, then ask ──────────────────────────────── */}
       <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <button onClick={() => navigate("record")}
-                className="card-tap group relative flex items-center gap-4 overflow-hidden p-4 sm:p-5 animate-rise"
+                className="card-tap group relative flex items-center gap-4 overflow-clip p-4 sm:p-5 animate-rise"
                 style={{ animationDelay: "40ms" }}>
-          <span className="pointer-events-none absolute -top-10 -right-10 size-40 rounded-full bg-danger/10 blur-2xl" />
-          <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-danger text-white shadow-pop">
+          <span className="pointer-events-none absolute -top-10 -right-10 size-40 rounded-full bg-ai/15 blur-2xl" />
+          <span className="bg-rec grid size-14 shrink-0 place-items-center rounded-2xl text-white shadow-pop transition-[scale,rotate] duration-300 group-hover:scale-105 group-hover:-rotate-3">
             <Mic size={26} strokeWidth={2.2} />
           </span>
           <span className="min-w-0 flex-1">
@@ -134,7 +143,7 @@ export default function RecallaDashboard({ navigate, user }) {
             <MicButton supported={voice.supported} listening={voice.listening} transcribing={voice.transcribing}
                        level={voice.level} onClick={voice.toggle} size={40} />
             <button type="submit" disabled={!askInput.trim()} aria-label="Ask"
-                    className="grid size-10 shrink-0 place-items-center rounded-full bg-ai text-white transition-opacity disabled:opacity-30">
+                    className="grid size-10 shrink-0 place-items-center rounded-full bg-ai-fill text-white transition-[opacity,scale] hover:scale-105 disabled:opacity-30">
               <ArrowUp size={20} strokeWidth={2.4} />
             </button>
           </form>

@@ -20,10 +20,10 @@ export default function MicButton({
       aria-pressed={listening}
       title={title || (listening ? "Listening — tap to stop" : "Tap and speak")}
       className={`relative grid shrink-0 place-items-center rounded-full transition-[background-color,transform] duration-150 active:scale-95
-        ${listening ? "bg-danger text-white" : "bg-surface-3 text-muted hover:text-fg"}`}
+        ${listening ? "bg-danger-fill text-white" : "bg-surface-3 text-muted hover:text-fg"}`}
       style={{ width: size, height: size, transform: listening ? `scale(${ring})` : undefined }}
     >
-      {listening && <span className="absolute inset-0 rounded-full bg-danger animate-ping-ring" aria-hidden="true" />}
+      {listening && <span className="absolute inset-0 rounded-full bg-danger-fill animate-ping-ring" aria-hidden="true" />}
       {transcribing
         ? <Loader2 size={size * 0.45} className="animate-spin" />
         : <Mic size={size * 0.45} className="relative" />}

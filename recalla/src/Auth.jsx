@@ -70,21 +70,16 @@ export default function Auth({ navigate, mode: initialMode = "login" }) {
   const switchMode = (m) => { setMode(m); setError(""); };
 
   return (
-    <div className="min-h-dvh overflow-y-auto bg-bg"
+    <div className="h-dvh overflow-y-auto"
          style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
-      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute -top-32 -left-24 size-96 rounded-full bg-brand/10 blur-3xl" />
-        <div className="absolute top-1/3 -right-32 size-96 rounded-full bg-ai/10 blur-3xl" />
-      </div>
-
       <div className="relative mx-auto grid min-h-dvh max-w-5xl grid-cols-1 items-center gap-8 px-5 py-10 lg:grid-cols-2 lg:gap-16">
         {/* What this is */}
         <div className="animate-rise">
-          <div className="flex items-center gap-3">
-            <Logo size={44} />
+          <div className="brand group inline-flex items-center gap-3.5">
+            <Logo size={52} />
             <div>
-              <div className="text-2xl font-bold tracking-tight">Recalla</div>
-              <div className="text-sm text-subtle">Your meeting memory</div>
+              <div className="brand-name text-[28px] font-bold leading-none tracking-tight">Recalla</div>
+              <div className="mt-1 text-[15px] font-medium text-muted">Every meeting, remembered.</div>
             </div>
           </div>
           <h1 className="mt-6 text-[28px] font-bold leading-tight tracking-tight sm:text-4xl">

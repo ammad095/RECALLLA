@@ -139,7 +139,7 @@ export default function App() {
 
   // Still verifying the stored token — hold off rather than flashing the
   // login screen at someone who is actually signed in.
-  if (user === null) return <div className="h-dvh bg-bg" />;
+  if (user === null) return <div className="h-dvh" />;
 
   if (!user) {
     return <Auth navigate={navigate} mode={page === "register" ? "register" : "login"} />;
