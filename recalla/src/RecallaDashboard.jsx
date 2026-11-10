@@ -4,9 +4,9 @@
 //             record, then ask — first, above anything to browse.
 // ============================================================
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
-  Mic, Sparkles, ArrowUp, ChevronRight, AudioLines, Bell, Brain, Clock,
+  Mic, MessageSquareText, ArrowUp, ChevronRight, AudioLines, Brain, Clock,
 } from "lucide-react";
 import { getAgentStatus } from "./agent_api";
 import { listReminders, listMeetings, getStats } from "./data_api";
@@ -24,7 +24,7 @@ const STARTERS = [
   "Remind me to send the report tomorrow at 10",
 ];
 
-export default function RecallaDashboard({ navigate, user }) {
+export default function RecallaDashboard({ navigate }) {
   const [reminders, setReminders] = useState([]);
   const [meetings, setMeetings]   = useState([]);
   const [counts, setCounts]       = useState({ meetings: 0, pending: 0, memories: 0 });
@@ -57,11 +57,6 @@ export default function RecallaDashboard({ navigate, user }) {
     return () => { alive = false; };
   }, []);
 
-  const greeting = useMemo(() => {
-    const h = new Date().getHours();
-    return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-  }, []);
-
   function ask(text) {
     const q = (text ?? askInput).trim();
     if (!q) return;
@@ -80,27 +75,24 @@ export default function RecallaDashboard({ navigate, user }) {
       width="max-w-5xl"
       // Phones show the brand here; on wide screens the sidebar already does.
       title={<>
-        <span className="brand group flex items-center gap-2.5 lg:hidden">
+        <span className="flex items-center gap-2.5 lg:hidden">
           <Logo size={30} /><span className="brand-name">Recalla</span>
         </span>
         <span className="hidden lg:inline">Home</span>
       </>}
-      subtitle={<span className="lg:hidden">Every meeting, remembered.</span>}
+      subtitle={<span className="lg:hidden">Every meeting, remembered</span>}
     >
-      {/* ── Greeting + what this is ─────────────────────────────────────── */}
-      <section className="mb-5 animate-rise">
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-subtle">
+      {/* ── The day, and what this is for ─────────────────────────────── */}
+      <section className="mb-6 animate-rise">
+        <h2 className="font-serif text-[32px] leading-tight sm:text-4xl">
           {new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-medium">
-            <span className={`size-1.5 rounded-full ${statusDot}`} />{statusText}
-          </span>
-        </p>
-        <h2 className="mt-0.5 text-[26px] font-bold leading-tight tracking-tight sm:text-3xl">
-          {greeting}, {(user?.name || "there").split(" ")[0]}
         </h2>
-        <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-muted">
-          Recalla listens to your meetings, remembers what was said and decided,
-          and answers when you ask.
+        <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-muted">
+          Record a meeting and Recalla keeps the transcript, the summary and what was
+          decided. Ask about any of it later.
+        </p>
+        <p className="mt-3 inline-flex items-center gap-2 text-[13px] text-subtle">
+          <span className={`size-1.5 rounded-full ${statusDot}`} />{statusText}
         </p>
       </section>
 
@@ -109,32 +101,31 @@ export default function RecallaDashboard({ navigate, user }) {
         <button onClick={() => navigate("record")}
                 className="card-tap group relative flex items-center gap-4 overflow-clip p-4 sm:p-5 animate-rise"
                 style={{ animationDelay: "40ms" }}>
-          <span className="pointer-events-none absolute -top-10 -right-10 size-40 rounded-full bg-ai/15 blur-2xl" />
-          <span className="bg-rec grid size-14 shrink-0 place-items-center rounded-2xl text-white shadow-pop transition-[scale,rotate] duration-300 group-hover:scale-105 group-hover:-rotate-3">
-            <Mic size={26} strokeWidth={2.2} />
+          <span className="bg-rec-fill grid size-12 shrink-0 place-items-center rounded-full text-white">
+            <Mic size={22} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-lg font-semibold">Record a meeting</span>
+            <span className="block text-lg font-medium">Record a meeting</span>
             <span className="mt-0.5 block text-sm leading-snug text-muted">
               Transcribed as you talk, speakers labelled, summary written for you.
             </span>
           </span>
-          <ChevronRight size={20} className="shrink-0 text-subtle transition-transform group-hover:translate-x-0.5" />
+          <ChevronRight size={18} className="shrink-0 text-subtle" />
         </button>
 
         <div className="card p-4 sm:p-5 animate-rise" style={{ animationDelay: "80ms" }}>
           <div className="mb-3 flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-lg bg-ai/15 text-ai"><Sparkles size={17} /></span>
-            <span className="font-semibold">Ask Recalla</span>
+            <span className="grid size-8 place-items-center rounded-lg bg-surface-3 text-muted"><MessageSquareText size={17} /></span>
+            <span className="font-medium">Ask Recalla</span>
             <span className="ml-auto text-xs text-subtle">meetings · email · calendar</span>
           </div>
 
           <form onSubmit={(e) => { e.preventDefault(); ask(); }}
-                className="flex items-center gap-2 rounded-xl border border-line bg-surface-3/50 p-1 pl-3.5 focus-within:border-ai">
+                className="flex items-center gap-2 rounded-xl border border-line bg-surface-3/50 p-1 pl-3.5 focus-within:border-brand">
             <input
               value={askInput}
               onChange={(e) => setAskInput(e.target.value)}
-              placeholder={voice.listening ? "Listening…" : "Ask anything…"}
+              placeholder={voice.listening ? "Listening…" : "Ask about a meeting"}
               disabled={voice.listening}
               enterKeyHint="send"
               aria-label="Ask Recalla a question"
@@ -143,7 +134,7 @@ export default function RecallaDashboard({ navigate, user }) {
             <MicButton supported={voice.supported} listening={voice.listening} transcribing={voice.transcribing}
                        level={voice.level} onClick={voice.toggle} size={40} />
             <button type="submit" disabled={!askInput.trim()} aria-label="Ask"
-                    className="grid size-10 shrink-0 place-items-center rounded-full bg-ai-fill text-white transition-[opacity,scale] hover:scale-105 disabled:opacity-30">
+                    className="grid size-10 shrink-0 place-items-center rounded-full bg-brand text-on-brand transition-[opacity,scale] disabled:opacity-30">
               <ArrowUp size={20} strokeWidth={2.4} />
             </button>
           </form>
@@ -165,14 +156,14 @@ export default function RecallaDashboard({ navigate, user }) {
       {/* ── First run: how it works ─────────────────────────────────────── */}
       {firstRun && (
         <section className="card mb-6 p-4 sm:p-5 animate-rise">
-          <h2 className="mb-3 font-semibold">How Recalla works</h2>
+          <h2 className="mb-3 font-medium">How Recalla works</h2>
           <ol className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[
-              { Icon: Mic, tone: "bg-danger/12 text-danger", title: "1. Record",
+              { Icon: Mic, tone: "bg-surface-3 text-muted", title: "1. Record",
                 body: "Tap the red button when a meeting starts. Audio stays on your device." },
-              { Icon: Brain, tone: "bg-brand/12 text-brand", title: "2. It remembers",
+              { Icon: Brain, tone: "bg-surface-3 text-muted", title: "2. It remembers",
                 body: "You get a transcript, a summary, and the decisions and tasks it heard." },
-              { Icon: Sparkles, tone: "bg-ai/12 text-ai", title: "3. Ask later",
+              { Icon: MessageSquareText, tone: "bg-surface-3 text-muted", title: "3. Ask later",
                 body: "“What did we agree on the budget?” — or have it email and schedule for you." },
             ].map(({ Icon, tone, title, body }) => (
               <li key={title} className="flex gap-3 sm:flex-col">
@@ -190,14 +181,13 @@ export default function RecallaDashboard({ navigate, user }) {
       {/* ── At a glance ─────────────────────────────────────────────────── */}
       <div className="mb-7 grid grid-cols-3 gap-2.5">
         {[
-          { label: "Meetings", value: counts.meetings, Icon: AudioLines, to: "meetings", tone: "text-brand" },
-          { label: "To do",    value: counts.pending,  Icon: Bell,       to: "reminders", tone: "text-warn" },
-          { label: "Memories", value: counts.memories, Icon: Brain,      to: "memory",    tone: "text-ai" },
+          { label: "Meetings recorded", value: counts.meetings, to: "meetings" },
+          { label: "Reminders to do",   value: counts.pending,  to: "reminders" },
+          { label: "Things remembered", value: counts.memories, to: "memory" },
         ].map((s) => (
           <button key={s.label} onClick={() => navigate(s.to)} className="card-tap p-3 sm:p-4">
-            <s.Icon size={18} className={s.tone} />
-            <div className="mt-2 text-2xl font-bold tabular-nums sm:text-3xl">{loading ? "–" : s.value}</div>
-            <div className="text-[13px] text-muted">{s.label}</div>
+            <div className="text-[13px] leading-snug text-muted">{s.label}</div>
+            <div className="mt-2 text-[28px] leading-none font-medium tabular-nums">{loading ? "–" : s.value}</div>
           </button>
         ))}
       </div>
@@ -214,7 +204,7 @@ export default function RecallaDashboard({ navigate, user }) {
               {meetings.map((m) => (
                 <button key={m.id} onClick={() => navigate("detail", { id: m.id })}
                         className="card-tap flex w-full items-center gap-3 p-3.5">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand/12 text-brand">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface-3 text-muted">
                     <AudioLines size={19} />
                   </span>
                   <span className="min-w-0 flex-1">

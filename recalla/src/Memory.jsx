@@ -12,10 +12,10 @@ import { fmtWhen } from "./format";
 import { Screen, EmptyState, Segmented, SkeletonList } from "./ui/kit";
 
 const TYPES = {
-  decision: { label: "Decisions", Icon: CheckCircle2,  tone: "bg-brand/12 text-brand" },
-  task:     { label: "Tasks",     Icon: ListTodo,      tone: "bg-ai/12 text-ai" },
-  deadline: { label: "Deadlines", Icon: CalendarClock, tone: "bg-danger/12 text-danger" },
-  question: { label: "Questions", Icon: HelpCircle,    tone: "bg-info/12 text-info" },
+  decision: { label: "Decisions", Icon: CheckCircle2,  tone: "bg-surface-3 text-muted" },
+  task:     { label: "Tasks",     Icon: ListTodo,      tone: "bg-surface-3 text-muted" },
+  deadline: { label: "Deadlines", Icon: CalendarClock, tone: "bg-surface-3 text-muted" },
+  question: { label: "Questions", Icon: HelpCircle,    tone: "bg-surface-3 text-muted" },
 };
 
 export default function Memory({ navigate }) {

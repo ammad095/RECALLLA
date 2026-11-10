@@ -20,7 +20,7 @@ export function Screen({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="glass-bar sticky top-0 z-20 border-b border-line"
+      <header className="bar sticky top-0 z-20 border-b border-line"
               style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className={`mx-auto flex min-h-14 w-full items-center gap-1 px-2 sm:px-4 ${width}`}>
           {onBack ? (
@@ -29,7 +29,7 @@ export function Screen({
             </button>
           ) : <span className="w-2" />}
           <div className="min-w-0 flex-1 py-2">
-            <h1 className="truncate text-[17px] font-semibold leading-tight sm:text-lg">{title}</h1>
+            <h1 className="truncate text-[17px] font-medium leading-tight sm:text-lg">{title}</h1>
             {subtitle && <p className="truncate text-[13px] text-subtle">{subtitle}</p>}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
@@ -50,8 +50,8 @@ export function Screen({
 }
 
 /** Friendly "nothing here yet" with a way forward. */
-export function EmptyState({ icon: Icon, title, body, action, tone = "brand" }) {
-  const toneCls = { brand: "bg-brand/12 text-brand", ai: "bg-ai/12 text-ai", muted: "bg-surface-3 text-muted" }[tone];
+export function EmptyState({ icon: Icon, title, body, action }) {
+  const toneCls = "bg-surface-3 text-muted";  // empty-state icons stay quiet
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center animate-rise">
       {Icon && (
@@ -59,7 +59,7 @@ export function EmptyState({ icon: Icon, title, body, action, tone = "brand" }) 
           <Icon size={26} strokeWidth={1.8} />
         </div>
       )}
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <h2 className="text-lg font-medium">{title}</h2>
       {body && <p className="mt-1.5 max-w-sm text-[15px] leading-relaxed text-muted">{body}</p>}
       {action && <div className="mt-5">{action}</div>}
     </div>
@@ -150,7 +150,7 @@ export function SkeletonList({ count = 3, h = "h-20" }) {
 export function SectionHeader({ title, action, onAction }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="text-[15px] font-semibold">{title}</h2>
+      <h2 className="text-[15px] font-medium">{title}</h2>
       {action && (
         <button onClick={onAction} className="-mr-2 rounded-lg px-2 py-1.5 text-sm font-medium text-brand hover:bg-brand/10">
           {action}
@@ -168,7 +168,7 @@ function initials(name) {
 
 export function Avatar({ name, size = 36 }) {
   return (
-    <span className="grid shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand to-ai font-semibold text-on-brand"
+    <span className="grid shrink-0 place-items-center rounded-full bg-surface-3 font-medium text-muted"
           style={{ width: size, height: size, fontSize: size * 0.36 }} aria-hidden="true">
       {initials(name)}
     </span>
@@ -201,10 +201,10 @@ export function Sheet({ open, onClose, title, children, labelledBy }) {
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
       <div className="absolute inset-0 animate-fade-in" style={{ background: "var(--scrim)" }} onClick={onClose} />
       <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={labelledBy}
-           className="relative max-h-[88dvh] w-full overflow-y-auto glass-panel rounded-t-3xl border border-line p-5 pb-[calc(20px+env(safe-area-inset-bottom))]
+           className="relative max-h-[88dvh] w-full overflow-y-auto panel rounded-t-3xl border border-line p-5 pb-[calc(20px+env(safe-area-inset-bottom))]
                       outline-none animate-sheet-in sm:max-w-md sm:rounded-3xl sm:pb-5">
         <div className="mx-auto -mt-2 mb-3 h-1 w-10 rounded-full bg-line-strong sm:hidden" />
-        {title && <h2 id={labelledBy} className="mb-3 text-lg font-semibold">{title}</h2>}
+        {title && <h2 id={labelledBy} className="mb-3 text-lg font-medium">{title}</h2>}
         {children}
       </div>
     </div>

@@ -5,7 +5,7 @@
 // ============================================================
 
 import { useState, useEffect } from "react";
-import { Plus, Bell, Check, Trash2, Sparkles } from "lucide-react";
+import { Plus, Bell, Check, Trash2, MessageSquareText } from "lucide-react";
 import { listReminders, createReminder, completeReminder, deleteReminder } from "./data_api";
 import { fmtRelative } from "./format";
 import { Screen, EmptyState, Segmented, SkeletonList, Banner, Sheet } from "./ui/kit";
@@ -106,7 +106,7 @@ export default function Reminders({ navigate }) {
           action={filter !== "completed" && (
             <div className="flex flex-wrap justify-center gap-2">
               <button className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={18} /> Add reminder</button>
-              <button className="btn btn-secondary" onClick={() => navigate("ask")}><Sparkles size={18} /> Ask Recalla</button>
+              <button className="btn btn-secondary" onClick={() => navigate("ask")}><MessageSquareText size={18} /> Ask Recalla</button>
             </div>
           )} />
       ) : (

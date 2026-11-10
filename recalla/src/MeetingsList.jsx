@@ -91,11 +91,11 @@ export default function MeetingsList({ navigate }) {
                      onClick={() => navigate("detail", m)}
                      onKeyDown={(e) => e.key === "Enter" && navigate("detail", m)}
                      className="card-tap group flex w-full items-start gap-3 p-3.5 sm:p-4">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand/12 text-brand">
+                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-surface-3 text-muted">
                     <AudioLines size={20} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block font-semibold leading-snug">{m.title}</span>
+                    <span className="block font-medium leading-snug">{m.title}</span>
                     <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-subtle">
                       <span>{fmtWhen(m.started_at)}</span>
                       <span className="inline-flex items-center gap-1"><Clock size={13} />{fmtDuration(m.duration_seconds)}</span>

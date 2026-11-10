@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  House, AudioLines, Mic, Sparkles, LayoutGrid, Bell, Brain, History,
+  House, AudioLines, Mic, MessageSquareText, LayoutGrid, Bell, Brain, History,
   Plug, Settings, ShieldCheck, LogOut, Sun, Moon, ChevronRight,
 } from "lucide-react";
 import { listNotifications } from "../data_api";
@@ -22,7 +22,7 @@ const PLACES = {
   dashboard:  { label: "Home",       icon: House,       hint: "Today at a glance" },
   meetings:   { label: "Meetings",   icon: AudioLines,  hint: "Every recording, transcript and summary" },
   record:     { label: "Record",     icon: Mic,         hint: "Capture a meeting as it happens" },
-  ask:        { label: "Ask",        icon: Sparkles,    hint: "Ask about meetings, email, calendar" },
+  ask:        { label: "Ask",        icon: MessageSquareText,    hint: "Ask about meetings, email, calendar" },
   reminders:  { label: "Reminders",  icon: Bell,        hint: "Things Recalla will nudge you about" },
   memory:     { label: "Memory",     icon: Brain,       hint: "Decisions, tasks and deadlines it found" },
   timeline:   { label: "Timeline",   icon: History,     hint: "Everything, in the order it happened" },
@@ -92,7 +92,7 @@ function useUnreadReminders() {
 function Badge({ n, className = "" }) {
   if (!n) return null;
   return (
-    <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger-fill px-1 text-[11px] font-bold leading-none text-white tabular-nums ${className}`}
+    <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger-fill px-1 text-[11px] font-medium leading-none text-white tabular-nums ${className}`}
           aria-label={`${n} due`}>
       {n > 9 ? "9+" : n}
     </span>
@@ -106,7 +106,7 @@ function TabItem({ id, label, Icon, active, onClick, badge }) {
     <button onClick={onClick} aria-current={on ? "page" : undefined}
             className={`relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium
                         transition-colors ${on ? "text-fg" : "text-subtle"}`}>
-      <span className={`grid h-8 w-14 place-items-center rounded-full transition-colors ${on ? "bg-brand/15 text-brand" : ""}`}>
+      <span className={`grid h-8 w-14 place-items-center rounded-full transition-colors ${on ? "bg-surface-3 text-fg" : ""}`}>
         <Icon size={22} strokeWidth={on ? 2.2 : 1.9} />
       </span>
       {label}
@@ -118,7 +118,7 @@ function TabItem({ id, label, Icon, active, onClick, badge }) {
 function BottomNav({ active, go, unread, onMore }) {
   return (
     <nav aria-label="Main"
-         className="glass-bar fixed inset-x-0 bottom-0 z-30 border-t border-line lg:hidden"
+         className="bar fixed inset-x-0 bottom-0 z-30 border-t border-line lg:hidden"
          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
       <div className="mx-auto flex max-w-lg items-end px-1">
         <TabItem id="dashboard" label="Home" Icon={House} active={active} onClick={() => go("dashboard")} />
@@ -128,13 +128,13 @@ function BottomNav({ active, go, unread, onMore }) {
         <div className="flex flex-1 justify-center">
           <button onClick={() => go("record")} aria-label="Record a meeting"
                   aria-current={active === "record" ? "page" : undefined}
-                  className="bg-rec -mt-5 mb-1 grid size-14 place-items-center rounded-full text-white shadow-pop
-                             ring-4 ring-white/10 transition-[scale,box-shadow] duration-200 hover:scale-105 active:scale-95">
+                  className="bg-rec-fill -mt-5 mb-1 grid size-14 place-items-center rounded-full text-white shadow-pop
+                             ring-4 ring-white/10 transition-[scale,box-shadow] duration-200 active:scale-95">
             <Mic size={26} strokeWidth={2.2} />
           </button>
         </div>
 
-        <TabItem id="ask" label="Ask" Icon={Sparkles} active={active} onClick={() => go("ask")} />
+        <TabItem id="ask" label="Ask" Icon={MessageSquareText} active={active} onClick={() => go("ask")} />
         <TabItem id="more" label="More" Icon={LayoutGrid} active={active} onClick={onMore} badge={unread} />
       </div>
     </nav>
@@ -149,7 +149,7 @@ function MoreSheet({ open, onClose, go, page, user, unread }) {
       <div className="mb-4 flex items-center gap-3">
         <Avatar name={user?.name} size={44} />
         <div className="min-w-0 flex-1">
-          <div id="more-title" className="truncate font-semibold">{user?.name || "Signed in"}</div>
+          <div id="more-title" className="truncate font-medium">{user?.name || "Signed in"}</div>
           <div className="truncate text-sm text-subtle">{user?.email}</div>
         </div>
       </div>
@@ -197,11 +197,11 @@ function SideLink({ id, active, go, unread }) {
             className={`group/link relative flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-[15px] font-medium
                         transition-[background-color,color,translate] duration-200
                         ${on ? "bg-surface-2 text-fg shadow-[inset_0_1px_0_var(--glass-hi)]"
-                             : "text-muted hover:translate-x-1 hover:bg-surface hover:text-fg"}`}>
-      {/* active marker: a short glowing bar on the left edge */}
+                             : "text-muted hover:bg-surface hover:text-fg"}`}>
+      {/* active marker: a short bar on the left edge */}
       <span className={`absolute top-1/2 left-0 h-5 w-1 -translate-y-1/2 rounded-full bg-brand transition-opacity duration-200
-                        shadow-[0_0_12px_var(--brand)] ${on ? "opacity-100" : "opacity-0"}`} />
-      <p.icon size={19} className={`transition-[color,scale] duration-200 group-hover/link:scale-110 ${on ? "text-brand" : ""}`} />
+                        ${on ? "opacity-100" : "opacity-0"}`} />
+      <p.icon size={19} className={`transition-[color,scale] duration-200 ${on ? "text-brand" : ""}`} />
       <span className="flex-1 text-left">{p.label}</span>
       {id === "reminders" && <Badge n={unread} />}
     </button>
@@ -213,7 +213,7 @@ function Sidebar({ page, go, user, unread }) {
   const link = { active: page === "detail" ? "meetings" : page, go, unread };
 
   return (
-    <aside className="glass-panel hidden w-64 shrink-0 flex-col border-r border-line lg:flex">
+    <aside className="panel hidden w-64 shrink-0 flex-col border-r border-line lg:flex">
       <Brand size={38} onClick={() => go("dashboard")} className="px-5 pt-6 pb-6" />
 
       <nav aria-label="Main" className="flex-1 space-y-0.5 overflow-y-auto px-3">

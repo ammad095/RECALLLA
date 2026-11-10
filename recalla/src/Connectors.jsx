@@ -145,7 +145,7 @@ export default function Connectors() {
 
           {device.length > 0 && (
             <section className="mt-8">
-              <h2 className="text-[15px] font-semibold">On the computer running Recalla</h2>
+              <h2 className="text-[15px] font-medium">On the computer running Recalla</h2>
               <p className="mt-1 mb-3 text-sm leading-relaxed text-subtle">
                 {onHost
                   ? "Actions that happen on this computer."
@@ -162,7 +162,7 @@ export default function Connectors() {
               <button onClick={() => setShowLater((s) => !s)} aria-expanded={showLater}
                       className="flex min-h-11 w-full items-center gap-2 text-left">
                 <span className="flex-1">
-                  <span className="block text-[15px] font-semibold">Not available yet</span>
+                  <span className="block text-[15px] font-medium">Not available yet</span>
                   <span className="block text-sm text-subtle">{later.map((c) => c.name).join(", ")}</span>
                 </span>
                 <ChevronDown size={20} className={`text-subtle transition-transform ${showLater ? "rotate-180" : ""}`} />
@@ -196,12 +196,12 @@ function Card({ c, busy, onConnect, onDisconnect, remote, code }) {
   return (
     <div className={`card flex flex-col p-4 ${live ? "" : "opacity-75"}`}>
       <div className="flex items-start gap-3">
-        <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${live ? "bg-brand/12 text-brand" : "bg-surface-3 text-subtle"}`}>
+        <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${live ? "bg-surface-3 text-muted" : "bg-surface-3 text-subtle"}`}>
           <Icon size={21} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold">{c.name}</div>
-          <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${meta.cls}`}>
+          <div className="font-medium">{c.name}</div>
+          <span className={`mt-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${meta.cls}`}>
             {st === "connected" && <Check size={12} strokeWidth={3} />}
             {st === "partial" && <CircleAlert size={12} />}
             {meta.label}
@@ -222,7 +222,7 @@ function Card({ c, busy, onConnect, onDisconnect, remote, code }) {
 
       {command && (
         <div className="mt-3 rounded-xl border border-brand/40 bg-brand/8 p-3">
-          <div className="text-xs font-semibold text-subtle">Send this message from your phone</div>
+          <div className="text-xs font-medium text-subtle">Send this message from your phone</div>
           <div className="mt-1 flex items-center gap-2">
             <code className="flex-1 font-mono text-lg font-medium text-brand">{command}</code>
             <button onClick={copy} className="btn btn-secondary btn-sm" aria-label="Copy the code">
@@ -240,7 +240,7 @@ function Card({ c, busy, onConnect, onDisconnect, remote, code }) {
       {live && (onConnect || onDisconnect) && (
         <div className="mt-auto flex gap-2 pt-4">
           {onConnect && st !== "connected" && (
-            <button onClick={onConnect} disabled={busy} className="btn btn-primary flex-1">
+            <button onClick={onConnect} disabled={busy} className="btn btn-secondary flex-1">
               {busy ? "Working…"
                 : st === "partial" ? "Reconnect"
                 : c.id === "whatsapp" ? "Link my number"

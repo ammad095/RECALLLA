@@ -6,7 +6,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import {
-  Mic, Square, Upload, ChevronDown, UserPlus, X, ShieldCheck, Users, Sparkles, Check, Loader2,
+  Mic, Square, Upload, ChevronDown, UserPlus, X, ShieldCheck, Users, MessageSquareText, Check, Loader2,
 } from "lucide-react";
 import { transcribeAudio, finalizeLiveSession } from "./api";
 import { BrowserTranscription, browserSttSupported, transcribeFile } from "./localStt";
@@ -241,7 +241,7 @@ export default function RecordMeeting({ navigate }) {
     const ctx = canvas.getContext("2d");
     const data = new Uint8Array(analyser.frequencyBinCount);
     // Canvas cannot read CSS variables — resolve the theme colours once.
-    const from = cssColor("rec-from"), to = cssColor("rec-to");
+    const from = cssColor("brand"), to = cssColor("brand");
 
     const draw = () => {
       animationRef.current = requestAnimationFrame(draw);
@@ -567,12 +567,12 @@ export default function RecordMeeting({ navigate }) {
   if (state === "recording") {
     return (
       <div className="flex h-full flex-col" style={{ paddingTop: "env(safe-area-inset-top)" }}>
-        <div className="flex items-center justify-center gap-2 pt-6 text-sm font-semibold text-danger">
-          <span className="size-2.5 rounded-full bg-danger animate-blink" /> Recording
+        <div className="flex items-center justify-center gap-2 pt-6 text-sm font-medium text-danger">
+          <span className="rec-dot animate-blink" /> Recording
         </div>
         {title && <p className="mt-1 truncate px-6 text-center text-muted">{title}</p>}
 
-        <div className="mt-6 text-center font-mono text-6xl font-medium tracking-tight tabular-nums sm:text-7xl" aria-live="off">
+        <div className="mt-6 text-center font-mono text-6xl font-medium tabular-nums sm:text-7xl" aria-live="off">
           {fmtClock(elapsed)}
         </div>
 
@@ -584,7 +584,7 @@ export default function RecordMeeting({ navigate }) {
         {isLive && (
           <div className="mx-auto mt-6 flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4">
             <div className="mb-2 flex items-center justify-between text-[13px]">
-              <span className="font-semibold text-muted">Live transcript</span>
+              <span className="font-medium text-muted">Live transcript</span>
               <span className="text-subtle">
                 {modelPct != null && modelPct < 100 ? `Preparing speech model · ${Math.round(modelPct)}%`
                   : liveQueued > 1 ? `${liveQueued} slices waiting`
@@ -601,20 +601,20 @@ export default function RecordMeeting({ navigate }) {
                   {liveSegments.map((s, i) => (
                     <div key={`${s.start}-${i}`} className="flex gap-3 animate-rise">
                       <span className="w-11 shrink-0 pt-0.5 font-mono text-xs text-subtle">{fmtClock(s.start)}</span>
-                      <span className="text-[15px] leading-relaxed">{s.text}</span>
+                      <span className="font-serif text-[17px] leading-relaxed">{s.text}</span>
                     </div>
                   ))}
                 </div>
               )}
               <div ref={transcriptEndRef} />
             </div>
-            <p className="mt-2 text-center text-xs text-subtle">Speakers are labelled when you stop.</p>
+            <p className="mt-2 text-center text-xs text-subtle">Speakers are labelled when you stop</p>
           </div>
         )}
 
         <div className="mt-auto flex flex-col items-center gap-2 pt-6 pb-[calc(28px+env(safe-area-inset-bottom))]">
           <button onClick={stopRecording} aria-label="Stop and save the recording"
-                  className="bg-rec grid size-20 place-items-center rounded-full text-white shadow-pop ring-8 ring-danger/20 transition-[scale] duration-200 hover:scale-105 active:scale-95">
+                  className="bg-rec-fill grid size-20 place-items-center rounded-full text-white shadow-pop ring-8 ring-danger/20 transition-[scale] duration-200 active:scale-95">
             <Square size={28} fill="currentColor" />
           </button>
           <span className="text-sm text-muted">Tap to stop and save</span>
@@ -629,14 +629,14 @@ export default function RecordMeeting({ navigate }) {
     return (
       <div className="flex h-full items-center justify-center px-5" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="w-full max-w-md animate-rise" role="status" aria-live="polite">
-          <span className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-brand/12 text-brand">
-            <Sparkles size={28} />
+          <span className="mx-auto mb-4 grid size-16 place-items-center rounded-2xl bg-surface-3 text-muted">
+            <MessageSquareText size={28} />
           </span>
-          <h1 className="text-center text-xl font-bold">Making sense of your meeting</h1>
+          <h1 className="text-center text-xl font-medium">Making sense of your meeting</h1>
           <p className="mt-1 text-center text-muted">{title || "Untitled meeting"}</p>
 
           <div className="mt-6 h-2 overflow-hidden rounded-full bg-surface-3">
-            <div className="h-full rounded-full bg-gradient-to-r from-brand to-info transition-[width] duration-500"
+            <div className="h-full rounded-full bg-brand transition-[width] duration-500"
                  style={{ width: `${Math.round(progress)}%` }} />
           </div>
           <p className="mt-1.5 text-right text-xs text-subtle tabular-nums">{Math.round(progress)}%</p>
@@ -647,7 +647,7 @@ export default function RecordMeeting({ navigate }) {
               return (
                 <li key={step} className={`flex min-h-10 items-center gap-3 px-1 transition-opacity ${i > currentStep ? "opacity-40" : ""}`}>
                   <span className={`grid size-6 shrink-0 place-items-center rounded-full
-                    ${done ? "bg-brand text-on-brand" : now ? "bg-warn/15 text-warn" : "bg-surface-3 text-subtle"}`}>
+                    ${done ? "bg-brand text-on-brand" : now ? "bg-surface-3 text-fg" : "bg-surface-3 text-subtle"}`}>
                     {done ? <Check size={14} strokeWidth={3} /> : now ? <Loader2 size={14} className="animate-spin" /> : <span className="size-1.5 rounded-full bg-current" />}
                   </span>
                   <span className={`text-[15px] ${now ? "font-medium" : done ? "text-muted" : ""}`}>{step}</span>
@@ -658,7 +658,7 @@ export default function RecordMeeting({ navigate }) {
           {modelPct != null && modelPct < 100 && (
             <p className="mt-3 text-center text-sm text-subtle">First time only: preparing the speech model · {Math.round(modelPct)}%</p>
           )}
-          <p className="mt-4 text-center text-sm text-subtle">Keep this screen open until it finishes.</p>
+          <p className="mt-4 text-center text-sm text-subtle">Keep this screen open until it finishes</p>
         </div>
       </div>
     );
@@ -671,13 +671,12 @@ export default function RecordMeeting({ navigate }) {
 
       <div className="flex flex-col items-center pt-4 pb-6 text-center sm:pt-8">
         <button onClick={startRecording} aria-label="Start recording"
-                className="bg-rec group relative grid size-36 place-items-center rounded-full text-white shadow-pop
-                           transition-[scale,box-shadow] duration-300 hover:scale-105 active:scale-95 sm:size-40">
-          <span className="absolute inset-0 rounded-full bg-danger/40 animate-ping-ring" aria-hidden="true" />
+                className="bg-rec-fill group relative grid size-36 place-items-center rounded-full text-white shadow-pop
+                           transition-[scale,box-shadow] duration-300 active:scale-95 sm:size-40">
           <span className="absolute -inset-3 rounded-full border-2 border-danger/25" aria-hidden="true" />
-          <Mic size={52} strokeWidth={2} className="relative transition-transform duration-300 group-hover:scale-110" />
+          <Mic size={48} strokeWidth={1.8} className="relative" />
         </button>
-        <h2 className="mt-7 text-xl font-bold">Tap to start recording</h2>
+        <h2 className="mt-7 text-xl font-medium">Tap to start recording</h2>
         <p className="mt-1.5 max-w-sm text-[15px] leading-relaxed text-muted">
           Put your phone on the table. Recalla writes down what's said and tidies it up when you stop.
         </p>
@@ -686,9 +685,9 @@ export default function RecordMeeting({ navigate }) {
           {[
             { Icon: ShieldCheck, text: "Audio stays on this device" },
             { Icon: Users, text: "Speakers labelled" },
-            { Icon: Sparkles, text: "Summary when you stop" },
+            { Icon: MessageSquareText, text: "Summary when you stop" },
           ].map(({ Icon, text }) => (
-            <li key={text} className="inline-flex items-center gap-1.5 rounded-full bg-surface-3 px-3 py-1.5 text-muted">
+            <li key={text} className="inline-flex items-center gap-1.5 rounded-md bg-surface-3 px-3 py-1.5 text-muted">
               <Icon size={14} className="text-brand" /> {text}
             </li>
           ))}

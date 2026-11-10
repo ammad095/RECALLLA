@@ -12,7 +12,7 @@ const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|_[^_\s][^_]*_)/g;
 function inline(text, key) {
   return text.split(INLINE).map((part, i) => {
     const k = `${key}-${i}`;
-    if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={k} className="font-semibold">{part.slice(2, -2)}</strong>;
+    if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={k} className="font-medium">{part.slice(2, -2)}</strong>;
     if (/^`[^`]+`$/.test(part)) return <code key={k} className="rounded bg-surface-3 px-1 py-0.5 font-mono text-[0.9em]">{part.slice(1, -1)}</code>;
     if (/^(\*[^*].*\*|_[^_].*_)$/.test(part)) return <em key={k}>{part.slice(1, -1)}</em>;
     return part;
@@ -62,7 +62,7 @@ export default function Markdown({ text = "" }) {
   return (
     <div className="space-y-2.5">
       {blocks.map((b, i) => {
-        if (b.type === "h") return <p key={i} className="font-semibold">{inline(b.text, i)}</p>;
+        if (b.type === "h") return <p key={i} className="font-medium">{inline(b.text, i)}</p>;
         if (b.type === "list") {
           const Tag = b.ordered ? "ol" : "ul";
           return (

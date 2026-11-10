@@ -124,17 +124,17 @@ export default function Settings({ navigate, user }) {
       <div className="card mb-7 flex items-center gap-3.5 p-4">
         <Avatar name={name || user?.name} size={52} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-lg font-semibold">{name || user?.name}</div>
+          <div className="truncate text-lg font-medium">{name || user?.name}</div>
           <div className="truncate text-sm text-subtle">{user?.email}</div>
         </div>
         {user?.role === "admin" && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-danger/12 px-2.5 py-1 text-xs font-semibold text-danger">
+          <span className="inline-flex items-center gap-1 rounded-full bg-danger/12 px-2.5 py-1 text-xs font-medium text-danger">
             <ShieldCheck size={13} /> Admin
           </span>
         )}
       </div>
 
-      <Group title="Account" footer="Your sign-in email can't be changed.">
+      <Group title="Account" footer="Your sign-in email can't be changed">
         <Row label="Name" htmlFor="s-name" stack>
           <input id="s-name" className="input" value={name} onChange={(e) => setName(e.target.value)}
                  onBlur={saveName} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} autoComplete="name" />
@@ -157,7 +157,7 @@ export default function Settings({ navigate, user }) {
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[13px] text-subtle">System follows your phone's light or dark setting.</p>
+          <p className="mt-2 text-[13px] text-subtle">System follows your phone's light or dark setting</p>
         </div>
       </Group>
 
@@ -234,7 +234,7 @@ export default function Settings({ navigate, user }) {
             <label className="label" htmlFor="s-new">New password</label>
             <input id="s-new" type="password" className="input" value={newPw} onChange={(e) => setNewPw(e.target.value)}
                    autoComplete="new-password" aria-describedby="s-new-hint" />
-            <p id="s-new-hint" className="mt-1 text-[13px] text-subtle">At least 8 characters, with a letter and a number.</p>
+            <p id="s-new-hint" className="mt-1 text-[13px] text-subtle">At least 8 characters, with a letter and a number</p>
           </div>
           {pwMsg && <Banner tone={pwMsg.ok ? "success" : "error"}>{pwMsg.text}</Banner>}
           <button type="submit" className="btn btn-secondary w-full sm:w-auto">Change password</button>

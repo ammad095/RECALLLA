@@ -5,7 +5,7 @@
 // ============================================================
 
 import { useState } from "react";
-import { Eye, EyeOff, Mic, Brain, Sparkles, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Mic, Brain, MessageSquareText, Loader2 } from "lucide-react";
 import { login as apiLogin, register as apiRegister } from "./auth_api";
 import { Banner } from "./ui/kit";
 import Logo from "./ui/Logo";
@@ -19,9 +19,9 @@ const STRENGTH = [
 ];
 
 const FEATURES = [
-  { Icon: Mic,      tone: "bg-danger/12 text-danger", title: "Record",       body: "Capture any meeting from your phone." },
-  { Icon: Brain,    tone: "bg-brand/12 text-brand",   title: "Remember",     body: "Transcript, summary, decisions and tasks." },
-  { Icon: Sparkles, tone: "bg-ai/12 text-ai",         title: "Ask anything", body: "Get answers, emails and reminders on demand." },
+  { Icon: Mic,      tone: "bg-surface-3 text-muted", title: "Record",       body: "Capture any meeting from your phone." },
+  { Icon: Brain,    tone: "bg-surface-3 text-muted",   title: "Remember",     body: "Transcript, summary, decisions and tasks." },
+  { Icon: MessageSquareText, tone: "bg-surface-3 text-muted",         title: "Ask anything", body: "Get answers, emails and reminders on demand." },
 ];
 
 export default function Auth({ navigate, mode: initialMode = "login" }) {
@@ -75,14 +75,14 @@ export default function Auth({ navigate, mode: initialMode = "login" }) {
       <div className="relative mx-auto grid min-h-dvh max-w-5xl grid-cols-1 items-center gap-8 px-5 py-10 lg:grid-cols-2 lg:gap-16">
         {/* What this is */}
         <div className="animate-rise">
-          <div className="brand group inline-flex items-center gap-3.5">
+          <div className="inline-flex items-center gap-3.5">
             <Logo size={52} />
             <div>
-              <div className="brand-name text-[28px] font-bold leading-none tracking-tight">Recalla</div>
-              <div className="mt-1 text-[15px] font-medium text-muted">Every meeting, remembered.</div>
+              <div className="text-[28px] font-medium leading-none">Recalla</div>
+              <div className="mt-1 text-[15px] font-medium text-muted">Every meeting, remembered</div>
             </div>
           </div>
-          <h1 className="mt-6 text-[28px] font-bold leading-tight tracking-tight sm:text-4xl">
+          <h1 className="mt-6 text-[28px] font-medium leading-tight sm:text-4xl">
             Never lose track of what was said in a meeting.
           </h1>
           <ul className="mt-6 hidden space-y-4 sm:block">
@@ -90,7 +90,7 @@ export default function Auth({ navigate, mode: initialMode = "login" }) {
               <li key={title} className="flex items-center gap-3.5">
                 <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}><Icon size={21} /></span>
                 <span>
-                  <span className="block font-semibold">{title}</span>
+                  <span className="block font-medium">{title}</span>
                   <span className="block text-[15px] text-muted">{body}</span>
                 </span>
               </li>
@@ -112,7 +112,7 @@ export default function Auth({ navigate, mode: initialMode = "login" }) {
           <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-surface-3/60 p-1" role="tablist">
             {[["login", "Sign in"], ["register", "Create account"]].map(([m, label]) => (
               <button key={m} role="tab" aria-selected={mode === m} onClick={() => switchMode(m)}
-                      className={`min-h-10 rounded-lg text-sm font-semibold transition-colors
+                      className={`min-h-10 rounded-lg text-sm font-medium transition-colors
                         ${mode === m ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>
                 {label}
               </button>
@@ -168,7 +168,7 @@ export default function Auth({ navigate, mode: initialMode = "login" }) {
 
           <p className="mt-5 text-center text-sm text-muted">
             {isRegister ? "Already have an account? " : "New to Recalla? "}
-            <button className="font-semibold text-brand" onClick={() => switchMode(isRegister ? "login" : "register")}>
+            <button className="font-medium text-brand" onClick={() => switchMode(isRegister ? "login" : "register")}>
               {isRegister ? "Sign in" : "Create an account"}
             </button>
           </p>

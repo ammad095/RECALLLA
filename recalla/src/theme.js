@@ -34,7 +34,7 @@ export function applyTheme(theme, persist = false) {
   root.setAttribute("data-theme", theme);
   // The Android status bar and browser chrome follow the page colour.
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
-    m.setAttribute("content", theme === "light" ? "#EEF2F8" : "#070A12");
+    m.setAttribute("content", theme === "light" ? "#F5F7FA" : "#0B0D14");
   });
   if (persist) {
     try { localStorage.setItem(THEME_KEY, theme); } catch { /* private mode */ }

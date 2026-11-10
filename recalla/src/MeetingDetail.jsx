@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from "react";
 import {
-  Clock, Users, FileText, Sparkles, RefreshCw, CheckCircle2, ListTodo, Search, Loader2, AudioLines,
+  Clock, Users, FileText, RefreshCw, CheckCircle2, ListTodo, Search, Loader2, AudioLines,
 } from "lucide-react";
 import { summarizeTranscript } from "./agent_api";
 import { getRefineStatus } from "./api";
@@ -203,7 +203,7 @@ export default function MeetingDetail({ navigate, meeting }) {
         {(M.tags || M.tagging?.auto_tags || []).slice(0, 3).map((t) => <span key={t} className="tag py-1">{t}</span>)}
       </div>
 
-      <div className="glass-bar sticky top-0 z-10 -mx-4 mb-5 px-2 sm:mx-0 sm:px-0">
+      <div className="bar sticky top-0 z-10 -mx-4 mb-5 px-2 sm:mx-0 sm:px-0">
         <Tabs value={tab} onChange={setTab} options={[
           { value: "summary", label: "Summary" },
           { value: "actions", label: "Tasks & decisions", count: tasks.length + decisions.length },
@@ -215,39 +215,44 @@ export default function MeetingDetail({ navigate, meeting }) {
       {/* ── Summary ───────────────────────────────────────────────────── */}
       {tab === "summary" && (
         <div className="animate-rise">
-          <section className="card p-4 sm:p-5">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-brand">
-              {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              {generating ? "Writing the summary…" : verbatim ? "Short meeting — shown in full" : "Summary"}
-            </div>
-            {genError && !generating && <Banner className="mb-2">Couldn't write a summary: {genError}</Banner>}
+          {/* The moment of this screen: the meeting written up like minutes. */}
+          <article className="card px-5 py-5 sm:px-8 sm:py-7">
+            <header className="mb-4 flex items-baseline justify-between gap-3 border-b border-line pb-3">
+              <span className="inline-flex items-center gap-2 text-[13px] font-medium text-muted">
+                {generating && <Loader2 size={14} className="animate-spin" />}
+                {generating ? "Writing the minutes…" : verbatim ? "Short meeting, shown in full" : "Minutes"}
+              </span>
+              <span className="font-mono text-xs text-subtle tabular-nums">{M.date} · {M.duration}</span>
+            </header>
+
+            {genError && !generating && <Banner className="mb-3">Couldn't write a summary: {genError}</Banner>}
             {generating && !summary ? (
-              <div className="space-y-2 pt-1"><div className="skeleton h-4" /><div className="skeleton h-4 w-11/12" /><div className="skeleton h-4 w-3/4" /></div>
+              <div className="space-y-2.5 pt-1"><div className="skeleton h-4" /><div className="skeleton h-4 w-11/12" /><div className="skeleton h-4 w-3/4" /></div>
             ) : summary ? (
-              <p className="text-[15px] leading-relaxed">{summary}</p>
+              <p className="font-serif text-[19px] leading-[1.6]">{summary}</p>
             ) : !genError && (
               <div className="py-2">
-                <p className="mb-3 text-[15px] text-muted">No summary yet.</p>
+                <p className="mb-3 text-[15px] text-muted">No summary yet</p>
                 <button className="btn btn-primary btn-sm" onClick={generateSummary} disabled={!M.fullText}>
-                  <Sparkles size={16} /> Write summary
+                  <FileText size={16} /> Write summary
                 </button>
               </div>
             )}
-          </section>
 
-          {keyPoints.length > 0 && (
-            <section className="mt-6">
-              <h2 className="mb-3 text-[15px] font-semibold">Key points</h2>
-              <ol className="space-y-2">
-                {keyPoints.map((p, i) => (
-                  <li key={i} className="card flex gap-3 p-3.5">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ai/12 text-sm font-semibold text-ai tabular-nums">{i + 1}</span>
-                    <span className="text-[15px] leading-relaxed">{p}</span>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          )}
+            {keyPoints.length > 0 && (
+              <section className="mt-6">
+                <h2 className="mb-3 text-[13px] font-medium text-muted">Key points</h2>
+                <ol className="space-y-3">
+                  {keyPoints.map((p, i) => (
+                    <li key={i} className="flex gap-4">
+                      <span className="w-5 shrink-0 pt-1 text-right font-mono text-[13px] text-subtle tabular-nums">{i + 1}</span>
+                      <span className="font-serif text-[17px] leading-relaxed">{p}</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
+          </article>
 
           {summary && !generating && (
             <button className="btn btn-ghost btn-sm mt-4 -ml-2" onClick={generateSummary}>
@@ -261,12 +266,12 @@ export default function MeetingDetail({ navigate, meeting }) {
       {tab === "actions" && (
         <div className="space-y-7 animate-rise">
           <section>
-            <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold">
+            <h2 className="mb-3 flex items-center gap-2 text-[15px] font-medium">
               <ListTodo size={18} className="text-ai" /> Action items
               {tasks.length > 0 && <span className="text-subtle">{tasks.length}</span>}
             </h2>
             {extracting && !tasks.length ? <SkeletonList count={2} h="h-16" /> : tasks.length === 0 ? (
-              <p className="text-[15px] text-subtle">No one committed to anything in this meeting.</p>
+              <p className="text-[15px] text-subtle">No one committed to anything in this meeting</p>
             ) : (
               <ul className="space-y-2">
                 {tasks.map((t, i) => (
@@ -288,12 +293,12 @@ export default function MeetingDetail({ navigate, meeting }) {
           </section>
 
           <section>
-            <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold">
+            <h2 className="mb-3 flex items-center gap-2 text-[15px] font-medium">
               <CheckCircle2 size={18} className="text-brand" /> Decisions
               {decisions.length > 0 && <span className="text-subtle">{decisions.length}</span>}
             </h2>
             {extracting && !decisions.length ? <SkeletonList count={2} h="h-16" /> : decisions.length === 0 ? (
-              <p className="text-[15px] text-subtle">Nothing was settled in this meeting.</p>
+              <p className="text-[15px] text-subtle">Nothing was settled in this meeting</p>
             ) : (
               <ul className="space-y-2">
                 {decisions.map((d, i) => (
@@ -339,12 +344,12 @@ export default function MeetingDetail({ navigate, meeting }) {
                 const c = color(seg.speaker || "Speaker 1");
                 return (
                   <li key={i} className="flex gap-3">
-                    <span className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold ${c.soft} ${c.text}`}>
+                    <span className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-medium ${c.soft} ${c.text}`}>
                       {(seg.speaker || "S").replace(/^Speaker\s*/i, "") || "S"}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="mb-0.5 flex items-baseline gap-2 text-[13px]">
-                        <span className={`font-semibold ${c.text}`}>{seg.speaker || "Speaker 1"}</span>
+                        <span className={`font-medium ${c.text}`}>{seg.speaker || "Speaker 1"}</span>
                         <span className="font-mono text-xs text-subtle">{fmtClock(seg.start)}</span>
                       </div>
                       <p className="text-[15px] leading-relaxed">{seg.text}</p>
@@ -360,7 +365,7 @@ export default function MeetingDetail({ navigate, meeting }) {
       {/* ── Speakers ──────────────────────────────────────────────────── */}
       {tab === "speakers" && (
         <div className="space-y-2.5 animate-rise">
-          <p className="mb-1 text-sm text-subtle">Who spoke, and for how much of the meeting.</p>
+          <p className="mb-1 text-sm text-subtle">Who spoke, and for how much of the meeting</p>
           {speakers.map((sp) => {
             const s = stats[sp] || { words: 0, duration: 0 };
             const pct = totalDur > 0 ? Math.round((s.duration / totalDur) * 100) : 0;
@@ -369,8 +374,8 @@ export default function MeetingDetail({ navigate, meeting }) {
               <div key={sp} className="card p-4">
                 <div className="mb-2.5 flex items-center gap-2.5">
                   <span className={`size-2.5 rounded-full ${c.dot}`} />
-                  <span className="flex-1 font-semibold">{sp}</span>
-                  <span className={`text-2xl font-bold tabular-nums ${c.text}`}>{pct}%</span>
+                  <span className="flex-1 font-medium">{sp}</span>
+                  <span className={`text-2xl font-medium tabular-nums ${c.text}`}>{pct}%</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-surface-3">
                   <div className={`h-full rounded-full ${c.dot} transition-[width] duration-700`} style={{ width: `${pct}%` }} />
@@ -390,7 +395,7 @@ export default function MeetingDetail({ navigate, meeting }) {
 
 function Fact({ Icon, children }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-3 px-2.5 py-1 font-medium text-muted">
+    <span className="inline-flex items-center gap-1.5 rounded-md bg-surface-3 px-2.5 py-1 text-muted">
       <Icon size={14} /> {children}
     </span>
   );

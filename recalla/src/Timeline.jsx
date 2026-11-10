@@ -10,8 +10,8 @@ import { getTimeline } from "./data_api";
 import { Screen, EmptyState, Segmented, SkeletonList } from "./ui/kit";
 
 const TYPES = {
-  meeting:  { label: "Meetings",  Icon: AudioLines, tone: "bg-brand/12 text-brand", to: "detail" },
-  reminder: { label: "Reminders", Icon: Bell,       tone: "bg-ai/12 text-ai",       to: "reminders" },
+  meeting:  { label: "Meetings",  Icon: AudioLines, tone: "bg-surface-3 text-muted", to: "detail" },
+  reminder: { label: "Reminders", Icon: Bell,       tone: "bg-surface-3 text-muted",       to: "reminders" },
 };
 
 // Group by calendar day so the feed reads as "Today / Yesterday / 14 Jun".
@@ -72,7 +72,7 @@ export default function Timeline({ navigate }) {
       ) : (
         Object.entries(groups).map(([day, list]) => (
           <section key={day} className="mb-6">
-            <h2 className="sticky top-0 z-10 -mx-4 mb-2 glass-bar px-4 py-1.5 text-sm font-semibold text-muted rounded-lg sm:mx-0 sm:px-0">
+            <h2 className="sticky top-0 z-10 -mx-4 mb-2 bar px-4 py-1.5 text-sm font-medium text-muted rounded-lg sm:mx-0 sm:px-0">
               {day}
             </h2>
             <ol className="relative ml-5 border-l border-line">

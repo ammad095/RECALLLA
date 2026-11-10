@@ -3,99 +3,76 @@
    PURPOSE:    Design tokens, base styles and the few component
                classes every screen shares. Mobile first: the phone
                layout is the default, wider screens are the override.
+
+   Direction (from an unslop pass — unslop by @heydamir, CC BY 4.0):
+     Product    Records meetings on your phone, writes the transcript and
+                summary, and answers what was said and decided.
+     Character  Attentive, calm, exact.
+     World      A notebook and a voice recorder on a meeting table.
+     Moments    The meeting summary, set like minutes; the live transcript.
+     Signature  The red record dot — only on things captured live.
+
+   So: quiet ink-grey chrome, one emerald accent used sparingly, red only
+   for recording and errors. Depth from surface steps and hairlines.
    ============================================================ */
 
 @import "tailwindcss";
 
-/* Light / dark follow <html data-theme>, set by theme.js before first paint.
-   Text colours were checked for WCAG AA (4.5:1) on glass over the brightest
-   part of the background gradient, in both themes. */
+/* Light / dark follow <html data-theme>, set by theme.js before first paint. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/* Palette: emerald (memory), violet (AI), cyan (info), rose (recording).
-   Deliberately no orange — warnings use gold, recording uses rose. */
+/* Ink ramp. Text roles were checked for WCAG AA on the card surface. */
 :root,
 :root[data-theme="dark"] {
-  --bg:          #070A12;
-  /* Surfaces are glass: translucent over the gradient behind them. */
-  --surface:     rgba(12,16,28,0.42);       /* smoky glass */
-  --surface-2:   rgba(255,255,255,0.09);    /* hover / pressed */
-  --surface-3:   rgba(255,255,255,0.10);    /* chips, inputs, wells */
-  --fg:          #F2F5FA;
-  --muted:       #B0BBCF;
-  --subtle:      #A8B4C8;
-  --line:        rgba(255,255,255,0.10);
-  --line-strong: rgba(255,255,255,0.18);
+  --deep:        #07080D;   /* sidebar */
+  --bg:          #0B0D14;   /* page */
+  --surface:     #11141C;   /* card */
+  --surface-2:   #161A23;   /* card hover */
+  --surface-3:   #1A1E28;   /* raised: inputs, active row, chips */
+  --fg:          #EEF0F5;   /* primary text   16.6:1 on card */
+  --muted:       #A3A9B8;   /* secondary text  7.7:1 */
+  --subtle:      #7F879A;   /* meta, captions  4.9:1 */
+  --line:        rgba(238,240,245,0.08);
+  --line-strong: rgba(238,240,245,0.14);
 
-  --brand:    #34D399;      /* memory / primary actions */
-  --on-brand: #04241A;
-  --ai:       #B9A6FC;      /* Ask Recalla (text) */
-  --ai-fill:  #7C3AED;      /* behind white text */
-  --info:     #22D3EE;
-  --danger:   #FDA4AF;      /* rose: recording, destructive (text) */
-  --danger-fill: #E11D48;   /* behind white text */
-  --warn:     #FACC15;      /* gold: needs attention */
-  --rec-from: #F43F5E;
-  --rec-to:   #A855F7;
+  --brand:       #34D399;   /* the one accent */
+  --on-brand:    #04241A;
+  --rec:         #E5484D;   /* the record dot; errors */
+  --rec-fill:    #CD2B31;   /* behind white text, 5.2:1 */
+  --warn:        #D4A72C;   /* gold, for "needs attention" only */
 
-  /* Liquid glass */
-  --glass:        rgba(10,13,22,0.55);       /* bars that content scrolls under */
-  --glass-strong: rgba(14,18,30,0.78);       /* sheets, sidebar */
-  --glass-edge:   rgba(255,255,255,0.14);
-  --glass-hi:     rgba(255,255,255,0.10);    /* top highlight */
-  --glass-sheen:  rgba(255,255,255,0.08);
-  /* Strong enough to colour the glass, weak enough that the dimmest text
-     still clears WCAG AA (4.5:1) at the centre of each glow. */
-  --mesh-1: rgba(52,211,153,0.30);
-  --mesh-2: rgba(167,139,250,0.30);
-  --mesh-3: rgba(34,211,238,0.24);
-  --mesh-4: rgba(251,113,133,0.12);
-
-  --shadow-card: 0 1px 2px rgba(0,0,0,.25), 0 8px 24px -12px rgba(0,0,0,.45);
-  --shadow-pop:  0 18px 48px -12px rgba(0,0,0,.7);
-  --scrim:       rgba(3,5,10,.55);
+  --shadow-pop:  0 16px 40px rgba(0,0,0,.45);
+  --scrim:       rgba(4,5,9,.6);
+  --hi:          inset 0 1px 0 rgba(255,255,255,0.06);
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --bg:          #EEF2F8;
-  --surface:     rgba(255,255,255,0.62);
-  --surface-2:   rgba(255,255,255,0.82);
-  --surface-3:   rgba(15,23,42,0.06);
-  --fg:          #0F172A;
-  --muted:       #3F4B5E;
-  --subtle:      #5B6779;
-  --line:        rgba(15,23,42,0.09);
-  --line-strong: rgba(15,23,42,0.16);
+  --deep:        #ECEFF4;
+  --bg:          #F5F7FA;
+  --surface:     #FFFFFF;
+  --surface-2:   #F8F9FB;
+  --surface-3:   #ECEFF4;
+  --fg:          #111827;   /* 17.7:1 on card */
+  --muted:       #4B5565;   /*  7.6:1 */
+  --subtle:      #646D80;   /*  5.2:1 */
+  --line:        rgba(17,24,39,0.08);
+  --line-strong: rgba(17,24,39,0.14);
 
-  --brand:    #047857;      /* 5.5:1 on white */
-  --on-brand: #FFFFFF;
-  --ai:       #6D28D9;
-  --ai-fill:  #7C3AED;
-  --info:     #0E7490;
-  --danger:   #BE123C;
-  --danger-fill: #E11D48;
-  --warn:     #854D0E;      /* deep gold, not orange */
-  --rec-from: #F43F5E;
-  --rec-to:   #A855F7;
+  --brand:       #047857;   /* 5.5:1 on white */
+  --on-brand:    #FFFFFF;
+  --rec:         #DC2626;
+  --rec-fill:    #DC2626;
+  --warn:        #8A6408;
 
-  --glass:        rgba(246,248,252,0.6);
-  --glass-strong: rgba(250,251,254,0.86);
-  --glass-edge:   rgba(255,255,255,0.75);
-  --glass-hi:     rgba(255,255,255,0.9);
-  --glass-sheen:  rgba(255,255,255,0.55);
-  --mesh-1: rgba(52,211,153,0.22);
-  --mesh-2: rgba(167,139,250,0.22);
-  --mesh-3: rgba(34,211,238,0.18);
-  --mesh-4: rgba(251,113,133,0.10);
-
-  --shadow-card: 0 1px 2px rgba(15,23,42,.05), 0 10px 28px -14px rgba(15,23,42,.22);
-  --shadow-pop:  0 18px 48px -12px rgba(15,23,42,.3);
-  --scrim:       rgba(15,23,42,.3);
+  --shadow-pop:  0 8px 24px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+  --scrim:       rgba(17,24,39,.32);
+  --hi:          0 1px 2px rgba(0,0,0,0.04);
   color-scheme: light;
 }
 
 @theme inline {
+  --color-deep:        var(--deep);
   --color-bg:          var(--bg);
   --color-surface:     var(--surface);
   --color-surface-2:   var(--surface-2);
@@ -107,241 +84,154 @@
   --color-line-strong: var(--line-strong);
   --color-brand:       var(--brand);
   --color-on-brand:    var(--on-brand);
-  --color-ai:          var(--ai);
-  --color-ai-fill:     var(--ai-fill);
-  --color-info:        var(--info);
-  --color-danger:      var(--danger);
-  --color-danger-fill: var(--danger-fill);
+  --color-rec:         var(--rec);
+  --color-rec-fill:    var(--rec-fill);
   --color-warn:        var(--warn);
+  /* Older names, kept so every screen speaks the same palette:
+     "danger" is the record red, "ai" and "info" are quiet text. */
+  --color-danger:      var(--rec);
+  --color-danger-fill: var(--rec-fill);
+  --color-ai:          var(--muted);
+  --color-ai-fill:     var(--brand);
+  --color-info:        var(--muted);
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans:  "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Newsreader", ui-serif, Georgia, serif;
+  --font-mono:  "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --shadow-card: var(--shadow-card);
-  --shadow-pop:  var(--shadow-pop);
+  --shadow-pop: var(--shadow-pop);
 
-  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────── */
 @layer base {
   html, body, #root { height: 100%; }
   body {
-    @apply text-fg font-sans antialiased;
-    background-color: var(--bg);
+    @apply bg-bg text-fg font-sans antialiased;
     font-size: 16px;
     line-height: 1.5;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
   }
-
-  /* The gradient the glass floats over. A fixed layer of radial gradients —
-     no blur filter — drifting slowly, so it costs one composited transform. */
-  body::before {
-    content: ""; position: fixed; inset: -25%; z-index: -1; pointer-events: none;
-    background:
-      /* This layer overhangs the screen by 25% each side (room to drift), so
-         the visible area is roughly 17%–83% of it. */
-      radial-gradient(30% 28% at 30% 27%, var(--mesh-1), transparent 72%),
-      radial-gradient(28% 26% at 72% 30%, var(--mesh-2), transparent 72%),
-      radial-gradient(30% 28% at 64% 72%, var(--mesh-3), transparent 72%),
-      radial-gradient(24% 22% at 30% 76%, var(--mesh-4), transparent 72%);
-    animation: mesh-drift 40s ease-in-out infinite alternate;
-    will-change: transform;
-  }
-
   button, [role="button"], a, label[for], select { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
   :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
   ::selection { background: var(--brand); color: var(--on-brand); }
-  select option { background: var(--bg); color: var(--fg); }
+  select option { background: var(--surface); color: var(--fg); }
 
   * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 }
 
 /* ── Shared components ────────────────────────────────────────────────── */
 @layer components {
-  /* Liquid glass: translucent fill, a light sheen from the top-left, a bright
-     top edge. Cards skip backdrop-filter — behind them is only the smooth
-     gradient, which blur would not change — so long lists stay fast. */
+  /* A card is a surface step and a hairline. Nothing glows. */
   .card, .card-tap {
-    @apply rounded-2xl border;
-    border-color: var(--glass-edge);
-    background: linear-gradient(155deg, var(--glass-sheen), transparent 45%), var(--surface);
-    box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow-card);
+    @apply rounded-2xl border border-line bg-surface;
+    box-shadow: var(--hi);
   }
-
   .card-tap {
-    /* clip, not hidden: a hidden-overflow box is still scrollable, and the
-       sweeping highlight gave it something to scroll to. */
-    position: relative; overflow: hidden; overflow: clip; text-align: left;
-    transition: translate 260ms var(--ease-out-soft), scale 160ms var(--ease-out-soft),
-                border-color 200ms ease, box-shadow 260ms ease, background-color 200ms ease;
-  }
-  /* A band of light that sweeps across on hover. */
-  .card-tap::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
-    background: linear-gradient(105deg, transparent 30%, var(--glass-sheen) 48%, transparent 66%);
-    translate: -110% 0; opacity: 0;
-    transition: translate 700ms var(--ease-out-soft), opacity 300ms ease;
+    text-align: left;
+    transition: background-color 150ms var(--ease-out-soft), border-color 150ms var(--ease-out-soft),
+                scale 120ms var(--ease-out-soft);
   }
   @media (hover: hover) {
-    .card-tap:hover {
-      translate: 0 -3px;
-      border-color: color-mix(in oklab, var(--brand) 45%, var(--glass-edge));
-      box-shadow: inset 0 1px 0 var(--glass-hi),
-                  0 16px 36px -16px color-mix(in oklab, var(--brand) 60%, transparent),
-                  var(--shadow-card);
-    }
-    .card-tap:hover::after { translate: 110% 0; opacity: 1; }
+    .card-tap:hover { background-color: var(--surface-2); border-color: var(--line-strong); }
   }
-  .card-tap:active { scale: 0.985; }
+  .card-tap:active { scale: 0.98; }
 
-  /* Bars that content scrolls under, and floating panels. */
-  .glass-bar {
-    background: var(--glass);
-    -webkit-backdrop-filter: blur(22px) saturate(180%);
-    backdrop-filter: blur(22px) saturate(180%);
-  }
-  .glass-panel {
-    background: linear-gradient(160deg, var(--glass-sheen), transparent 40%), var(--glass-strong);
-    -webkit-backdrop-filter: blur(28px) saturate(180%);
-    backdrop-filter: blur(28px) saturate(180%);
-    box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow-pop);
-  }
+  /* Header, tab bar: solid, separated by a hairline. */
+  .bar { background: var(--bg); }
+  /* Sheets and dialogs float, so they keep a soft neutral shadow. */
+  .panel { background: var(--surface); box-shadow: var(--shadow-pop); }
 
-  /* Buttons: 44px minimum height so every one is a comfortable thumb target. */
+  /* Buttons: 44px tall on phones so every one is a comfortable thumb target. */
   .btn {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4
-           text-[15px] font-semibold whitespace-nowrap select-none;
-    transition: translate 220ms var(--ease-out-soft), scale 140ms var(--ease-out-soft),
-                box-shadow 220ms ease, background-color 160ms ease, border-color 160ms ease,
-                color 160ms ease, opacity 160ms ease, filter 160ms ease;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] px-4
+           text-[15px] font-medium whitespace-nowrap select-none;
+    transition: background-color 150ms var(--ease-out-soft), border-color 150ms var(--ease-out-soft),
+                color 150ms var(--ease-out-soft), opacity 150ms var(--ease-out-soft),
+                scale 120ms var(--ease-out-soft);
   }
   .btn:active:not(:disabled) { scale: 0.97; }
   .btn:disabled { opacity: .45; }
-  .btn-primary {
-    color: var(--on-brand);
-    background: linear-gradient(135deg, var(--brand), color-mix(in oklab, var(--brand) 55%, var(--info)));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 6px 18px -8px color-mix(in oklab, var(--brand) 70%, transparent);
-  }
-  .btn-ai {
-    color: #fff;
-    background: linear-gradient(135deg, var(--ai-fill), color-mix(in oklab, var(--ai-fill) 70%, #4F46E5));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 6px 18px -8px color-mix(in oklab, var(--ai) 70%, transparent);
-  }
-  .btn-rec {
-    color: #fff;
-    background: linear-gradient(135deg, var(--rec-from), var(--rec-to));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 6px 18px -8px color-mix(in oklab, var(--rec-from) 70%, transparent);
-  }
-  .btn-danger { color: #fff; background: var(--danger-fill); }
-  .btn-secondary {
-    @apply border text-fg;
-    border-color: var(--glass-edge);
-    background: var(--surface);
-    box-shadow: inset 0 1px 0 var(--glass-hi);
-  }
-  .btn-ghost { @apply text-muted hover:bg-surface-2 hover:text-fg; }
-  .btn-sm    { @apply min-h-9 rounded-lg px-3 text-sm; }
+  .btn-primary   { background: var(--brand); color: var(--on-brand); }
+  .btn-ai        { background: var(--brand); color: var(--on-brand); }
+  .btn-rec       { background: var(--rec-fill); color: #fff; }
+  .btn-danger    { background: var(--rec-fill); color: #fff; }
+  .btn-secondary { @apply border border-line-strong bg-surface-3 text-fg; }
+  .btn-ghost     { @apply text-muted; }
+  .btn-sm        { @apply min-h-9 rounded-lg px-3 text-sm; }
   @media (hover: hover) {
-    .btn-primary:hover:not(:disabled), .btn-ai:hover:not(:disabled), .btn-rec:hover:not(:disabled) {
-      translate: 0 -1px; filter: brightness(1.08) saturate(1.1);
+    .btn-primary:hover:not(:disabled), .btn-ai:hover:not(:disabled) {
+      background: color-mix(in oklab, var(--brand) 88%, var(--fg));
     }
-    .btn-primary:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 12px 28px -10px color-mix(in oklab, var(--brand) 80%, transparent); }
-    .btn-ai:hover:not(:disabled)      { box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 12px 28px -10px color-mix(in oklab, var(--ai) 80%, transparent); }
-    .btn-rec:hover:not(:disabled)     { box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 12px 28px -10px color-mix(in oklab, var(--rec-from) 80%, transparent); }
-    .btn-danger:hover:not(:disabled)  { filter: brightness(1.08); }
-    .btn-secondary:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line-strong); }
+    .btn-rec:hover:not(:disabled), .btn-danger:hover:not(:disabled) {
+      background: color-mix(in oklab, var(--rec-fill) 88%, #fff);
+    }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-2); }
+    .btn-ghost:hover:not(:disabled)     { background: var(--surface-3); color: var(--fg); }
   }
-
-  /* The record gradient, for the big round buttons. */
-  .bg-rec { background-image: linear-gradient(135deg, var(--rec-from), var(--rec-to)); }
 
   .icon-btn {
-    @apply inline-grid size-11 shrink-0 place-items-center rounded-xl text-muted
-           transition-[background-color,color,scale] duration-150
-           hover:bg-surface-2 hover:text-fg active:scale-95;
+    @apply inline-grid size-11 shrink-0 place-items-center rounded-[10px] text-muted
+           transition-[background-color,color,scale] duration-150 ease-out-soft
+           hover:bg-surface-3 hover:text-fg active:scale-95;
   }
 
   .input {
-    @apply min-h-11 w-full rounded-xl border border-line bg-surface-3/60 px-3.5 text-base
+    @apply min-h-11 w-full rounded-[10px] border border-line bg-surface-3 px-3.5 text-base
            text-fg placeholder:text-subtle outline-none
            transition-[border-color,box-shadow] duration-150;
   }
   .input:focus {
     border-color: var(--brand);
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 22%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--brand) 20%, transparent);
   }
 
   .label { @apply mb-1.5 block text-sm font-medium text-muted; }
 
+  /* Filters and choices: a small control, not a pill. */
   .chip {
-    @apply inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5
-           text-sm font-medium text-muted transition-colors duration-150
-           hover:border-line-strong hover:text-fg;
-    border-color: var(--glass-edge);
-    background: var(--surface);
+    @apply inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-3
+           text-sm text-muted transition-colors duration-150 hover:border-line-strong hover:text-fg;
   }
-  .chip[aria-pressed="true"] { @apply border-transparent bg-fg text-bg; }
+  .chip[aria-pressed="true"] { @apply border-line-strong bg-surface-3 text-fg; }
 
-  .tag { @apply inline-flex items-center rounded-md bg-surface-3 px-2 py-0.5 text-xs font-medium text-muted; }
+  .tag { @apply inline-flex items-center rounded-md bg-surface-3 px-2 py-0.5 text-xs text-muted; }
 
-  .eyebrow { @apply text-xs font-semibold tracking-wide text-subtle uppercase; }
+  /* Section labels: sentence case, never shouting. */
+  .eyebrow { @apply text-[13px] font-medium text-subtle; }
 
-  .skeleton { @apply relative overflow-hidden rounded-2xl bg-surface-3/70; }
+  .skeleton { @apply relative overflow-hidden rounded-2xl bg-surface-3; }
   .skeleton::after {
     content: ""; position: absolute; inset: 0; transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+    background: linear-gradient(90deg, transparent, var(--line), transparent);
     animation: shimmer 1.4s infinite;
   }
 
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
 
-  /* Logo: tilt, glow and a rippling wave on hover. */
-  .logo { transition: rotate 400ms var(--ease-out-soft), scale 400ms var(--ease-out-soft), filter 300ms ease; }
-  .logo .logo-bar { transform-box: fill-box; transform-origin: center; }
-  @media (hover: hover) {
-    .logo:hover, .brand:hover .logo {
-      rotate: -6deg; scale: 1.06;
-      filter: drop-shadow(0 6px 16px color-mix(in oklab, var(--brand) 55%, transparent));
-    }
-    .logo:hover .logo-bar, .brand:hover .logo .logo-bar { animation: bar-wave 900ms ease-in-out infinite; }
-    .brand:hover .brand-name {
-      background: linear-gradient(120deg, var(--brand), var(--info) 50%, var(--ai));
-      -webkit-background-clip: text; background-clip: text; color: transparent;
-    }
-  }
-
-  /* Gradient text for the wordmark and a few headings. */
-  .text-gradient {
-    background: linear-gradient(120deg, var(--brand), var(--info) 50%, var(--ai));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
+  /* The signature: a small solid red dot, only on things captured live. */
+  .rec-dot { @apply inline-block size-2 shrink-0 rounded-full bg-rec; }
 }
 
-/* ── Motion: transform + opacity only, and none when the OS asks ───────── */
+/* ── Motion: one curve, short durations, nothing loops unless it is live ── */
 @keyframes shimmer  { to { transform: translateX(100%); } }
 @keyframes rise     { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes sheet-in { from { transform: translateY(100%); } to { transform: none; } }
 @keyframes fade-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ping-ring {
-  0%   { transform: scale(1);   opacity: .45; }
-  100% { transform: scale(1.9); opacity: 0; }
+  0%   { transform: scale(1);   opacity: .4; }
+  100% { transform: scale(1.8); opacity: 0; }
 }
 @keyframes blink { 50% { opacity: .35; } }
-@keyframes mesh-drift {
-  0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
-  50%  { transform: translate3d(4%, -3%, 0) rotate(6deg); }
-  100% { transform: translate3d(-3%, 4%, 0) rotate(-4deg); }
-}
-/* The logo's waveform bars, rippling on hover. */
-@keyframes bar-wave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.45); } }
 
-@utility animate-rise      { animation: rise 320ms var(--ease-out-soft) both; }
-@utility animate-sheet-in  { animation: sheet-in 280ms var(--ease-out-soft) both; }
-@utility animate-fade-in   { animation: fade-in 200ms ease-out both; }
+@utility animate-rise      { animation: rise 360ms var(--ease-out-soft) both; }
+@utility animate-sheet-in  { animation: sheet-in 320ms var(--ease-out-soft) both; }
+@utility animate-fade-in   { animation: fade-in 180ms var(--ease-out-soft) both; }
+/* Live only: the recording dot and the mic while it is listening. */
 @utility animate-blink     { animation: blink 1.2s ease-in-out infinite; }
 @utility animate-ping-ring { animation: ping-ring 1.6s ease-out infinite; }
 

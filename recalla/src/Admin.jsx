@@ -55,7 +55,7 @@ export default function Admin({ navigate }) {
         {stats.map((s) => (
           <div key={s.label} className="card p-3.5">
             <s.Icon size={18} className={s.tone} />
-            <div className="mt-2 text-2xl font-bold tabular-nums">{loading ? "–" : s.value}</div>
+            <div className="mt-2 text-2xl font-medium tabular-nums">{loading ? "–" : s.value}</div>
             <div className="text-[13px] text-muted">{s.label}</div>
           </div>
         ))}
@@ -82,7 +82,7 @@ export default function Admin({ navigate }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium">{u.name}</span>
-                    {u.role === "admin" && <span className="rounded bg-danger/12 px-1.5 text-[11px] font-semibold text-danger">ADMIN</span>}
+                    {u.role === "admin" && <span className="rounded bg-danger/12 px-1.5 text-[11px] font-medium text-danger">ADMIN</span>}
                   </div>
                   <div className="truncate text-[13px] text-subtle">{u.email}</div>
                   <div className="text-xs text-subtle">
@@ -98,7 +98,7 @@ export default function Admin({ navigate }) {
                 </div>
               </li>
             ))}
-            {shown.length === 0 && <li className="px-4 py-8 text-center text-subtle">No users match.</li>}
+            {shown.length === 0 && <li className="px-4 py-8 text-center text-subtle">No users match</li>}
           </ul>
         </>
       ) : (
@@ -110,7 +110,7 @@ export default function Admin({ navigate }) {
               <span className="shrink-0 text-[13px] text-subtle">{fmtWhen(u.last_login_at)}</span>
             </li>
           ))}
-          {signIns.length === 0 && <li className="px-4 py-8 text-center text-subtle">No sign-ins yet.</li>}
+          {signIns.length === 0 && <li className="px-4 py-8 text-center text-subtle">No sign-ins yet</li>}
         </ul>
       )}
     </Screen>

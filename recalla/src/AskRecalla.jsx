@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import {
-  Sparkles, ArrowUp, Plus, MessagesSquare, Pencil, Trash2, Mail, CalendarCheck,
+  MessageSquareText, ArrowUp, Plus, MessagesSquare, Pencil, Trash2, Mail, CalendarCheck,
   CheckCircle2, XCircle, ExternalLink, Loader2, Send,
 } from "lucide-react";
 import { listChats, getChat, appendTurns, deleteChat, renameChat } from "./chats_api";
@@ -41,7 +41,7 @@ const EmailPreviewCard = ({ preview, draftId }) => {
 
   return (
     <div className={`card mt-2 w-full overflow-hidden animate-rise ${status === "sent" ? "border-brand/40" : "border-ai/40"}`}>
-      <div className={`flex items-center gap-2 border-b border-line px-4 py-2.5 text-sm font-semibold ${head.cls}`}>
+      <div className={`flex items-center gap-2 border-b border-line px-4 py-2.5 text-sm font-medium ${head.cls}`}>
         <head.Icon size={16} className={status === "sending" ? "animate-spin" : ""} /> {head.text}
       </div>
       <dl className="space-y-2 px-4 pt-3 text-sm">
@@ -67,7 +67,7 @@ const CalendarEventCard = ({ event }) => {
     <div className="card mt-2 flex w-full gap-3 border-info/40 p-3.5 animate-rise">
       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-info/12 text-info"><CalendarCheck size={20} /></span>
       <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold text-info">Added to your calendar</div>
+        <div className="text-xs font-medium text-info">Added to your calendar</div>
         <div className="font-medium">{event.title || event.summary}</div>
         <div className="mt-0.5 text-[13px] text-subtle">
           {start && start.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
@@ -94,12 +94,12 @@ const OpenLinkCard = ({ result }) => {
   return (
     <a href={result.url} target="_blank" rel="noopener noreferrer"
        className="card-tap mt-2 flex w-full items-center gap-3 border-brand/40 p-3.5">
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand/12 text-brand"><ExternalLink size={19} /></span>
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface-3 text-muted"><ExternalLink size={19} /></span>
       <span className="min-w-0 flex-1">
         <span className="block font-medium">{result.label || "Open"}</span>
         <span className="block truncate text-[13px] text-subtle">{result.note || host}</span>
       </span>
-      <span className="text-sm font-semibold text-brand">Open</span>
+      <span className="text-sm font-medium text-brand">Open</span>
     </a>
   );
 };
@@ -132,7 +132,7 @@ const ActionCard = ({ action }) => {
   else detail = r?.message || "";
 
   return (
-    <div className="mt-1.5 inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px]">
+    <div className="mt-1.5 inline-flex max-w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-[13px]">
       {ok ? <CheckCircle2 size={15} className="shrink-0 text-brand" /> : <XCircle size={15} className="shrink-0 text-danger" />}
       <span className="font-medium">{TOOL_LABEL[action.tool] || action.tool.replace(/_/g, " ")}</span>
       {detail && <span className="truncate text-subtle">{detail}</span>}
@@ -144,7 +144,7 @@ const Message = ({ msg }) => {
   if (msg.role === "user") {
     return (
       <div className="mb-4 flex justify-end animate-rise">
-        <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-ai-fill px-4 py-2.5 text-[15px] leading-relaxed text-white whitespace-pre-wrap break-words">
+        <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-surface-3 px-4 py-2.5 text-[15px] leading-relaxed text-fg whitespace-pre-wrap break-words">
           {msg.content}
         </div>
       </div>
@@ -152,7 +152,7 @@ const Message = ({ msg }) => {
   }
   return (
     <div className="mb-5 flex gap-2.5 animate-rise">
-      <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-ai/15 text-ai"><Sparkles size={16} /></span>
+      <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-surface-3 text-muted"><MessageSquareText size={16} /></span>
       <div className="min-w-0 flex-1">
         <div className={`text-[15px] leading-relaxed break-words ${msg.error ? "text-danger" : ""}`}>
           <Markdown text={msg.content || "…"} />
@@ -167,7 +167,7 @@ const Message = ({ msg }) => {
 
 const Thinking = () => (
   <div className="mb-5 flex items-center gap-2.5" role="status">
-    <span className="grid size-8 place-items-center rounded-full bg-ai/15 text-ai"><Sparkles size={16} /></span>
+    <span className="grid size-8 place-items-center rounded-full bg-surface-3 text-muted"><MessageSquareText size={16} /></span>
     <span className="flex gap-1" aria-label="Recalla is thinking">
       {[0, 150, 300].map((d) => <span key={d} className="size-2 rounded-full bg-ai animate-blink" style={{ animationDelay: `${d}ms` }} />)}
     </span>
@@ -304,7 +304,7 @@ export default function AskRecalla() {
 
   const chatList = (
     <div className="space-y-0.5">
-      {sessions.length === 0 && <p className="px-3 py-6 text-center text-sm text-subtle">No saved chats yet.</p>}
+      {sessions.length === 0 && <p className="px-3 py-6 text-center text-sm text-subtle">No saved chats yet</p>}
       {sessions.map((s) => (
         <div key={s.id} className={`group flex items-center rounded-xl ${s.id === sessionId ? "bg-surface-3" : "hover:bg-surface-2"}`}>
           <button onClick={() => openSession(s.id)} className="min-h-12 min-w-0 flex-1 px-3 py-2 text-left">
@@ -321,7 +321,7 @@ export default function AskRecalla() {
   return (
     <div className="flex h-full">
       {/* Wide screens: past chats alongside */}
-      <aside className="glass-panel hidden w-72 shrink-0 flex-col border-r border-line xl:flex">
+      <aside className="panel hidden w-72 shrink-0 flex-col border-r border-line xl:flex">
         <div className="p-3">
           <button onClick={newSession} className="btn btn-secondary w-full"><Plus size={18} /> New chat</button>
         </div>
@@ -348,8 +348,8 @@ export default function AskRecalla() {
               {messages.length === 0 ? (
                 <div className="animate-rise">
                   <div className="mb-6 text-center">
-                    <span className="mx-auto mb-3 grid size-14 place-items-center rounded-2xl bg-ai/15 text-ai"><Sparkles size={26} /></span>
-                    <h2 className="text-2xl font-bold tracking-tight">What can I help with?</h2>
+                    <span className="mx-auto mb-3 grid size-14 place-items-center rounded-2xl bg-surface-3 text-muted"><MessageSquareText size={26} /></span>
+                    <h2 className="text-2xl font-medium">What can I help with?</h2>
                     <p className="mx-auto mt-1.5 max-w-md text-[15px] leading-relaxed text-muted">
                       Ask about anything said in your meetings, or have me handle email,
                       calendar and reminders. I always show you an email before it's sent.
@@ -375,7 +375,7 @@ export default function AskRecalla() {
           </div>
 
           {/* Composer: sits above the phone tab bar */}
-          <div className="glass-bar border-t border-line px-3 pt-2.5 pb-[calc(84px+env(safe-area-inset-bottom))] backdrop-blur lg:pb-4">
+          <div className="bar border-t border-line px-3 pt-2.5 pb-[calc(84px+env(safe-area-inset-bottom))] lg:pb-4">
             <form className="mx-auto flex max-w-3xl items-end gap-2" onSubmit={(e) => { e.preventDefault(); sendMessage(); }}>
               <div className="flex min-w-0 flex-1 items-end rounded-3xl border border-line bg-surface-2 py-1 pr-1 pl-4 focus-within:border-ai">
                 <textarea
@@ -396,7 +396,7 @@ export default function AskRecalla() {
                            level={voice.level} onClick={voice.toggle} size={40} />
               </div>
               <button type="submit" disabled={loading || !input.trim()} aria-label="Send"
-                      className="grid size-12 shrink-0 place-items-center rounded-full bg-ai-fill text-white transition-[opacity,scale] hover:scale-105 disabled:opacity-30">
+                      className="grid size-12 shrink-0 place-items-center rounded-full bg-brand text-on-brand transition-[opacity,scale] disabled:opacity-30">
                 <ArrowUp size={22} strokeWidth={2.4} />
               </button>
             </form>
